@@ -1,0 +1,43 @@
+---
+description: Clean code, riuso e soglia indicativa 300 righe per file
+alwaysApply: true
+---
+
+# Clean code (Octo Core)
+
+## Prima di scrivere codice nuovo
+
+1. Cercare nel repository un’implementazione equivalente (grep, navigazione moduli, `packages/` condivisi).
+2. Riusare o estendere l’esistente. Estrarre una funzione/modulo condiviso solo se due call site hanno **lo stesso comportamento** e la duplicazione è reale — non per “pulizia” di una sola occorrenza.
+3. Non introdurre helper da una riga se l’inline è più chiaro nel contesto del progetto.
+
+## Qualità verificabile
+
+- TypeScript **strict**; tipi espliciti ai confini pubblici (API, contratti Zod, IPC).
+- Una responsabilità per modulo/funzione; nomi che descrivono intento, non abbreviazioni opache.
+- Errori gestiti o propagati con contesto; niente `catch` vuoti.
+- Nessun dead code, commenti obsoleti o funzioni duplicate con nomi diversi.
+- Dipendenze verso porte/interfacce (`CaptureAdapter`, `ModelAdapter`, …) come in [roadmap.md](../../roadmap.md), non verso implementazioni concrete nei layer sbagliati.
+
+## Soglia ~300 righe per file
+
+- **Target indicativo**, non hard cap: oltre ~300 righe di codice sorgente (esclusi generated, lockfile, migrazioni SQL pure, fixture JSON grandi) **refactorare o spezzare** prima di aggiungere altro.
+- Se superare la soglia è inevitabile, **motivare in commit/PR** (es. schema Zod monolitico temporaneo) e pianificare split nella stessa fase A o nella successiva.
+- I test di integrazione di fase possono essere più lunghi se restano un unico scenario leggibile; preferire fixture condivise in `packages/test-fixtures/`.
+
+## Esempi
+
+```typescript
+// BAD — duplica calcolo durata già in domain/time
+function getEpisodeMinutes(ep: Episode) {
+  return ep.intervals.reduce((s, i) => s + (i.end - i.start), 0);
+}
+
+// GOOD — riusa unionIntervals + toMinutes dal dominio
+import { unionIntervals, totalDurationMs } from "../domain/time";
+```
+
+```typescript
+// BAD — file orchestration da 600 righe
+// GOOD — apps/engine/src/jobs/ + apps/engine/src/domain/ con file < ~300 righe ciascuno
+```

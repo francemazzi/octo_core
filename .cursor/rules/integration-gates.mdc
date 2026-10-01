@@ -1,0 +1,48 @@
+---
+description: Chiusura fasi A00–A12 solo con test di integrazione reale e pnpm gate
+alwaysApply: true
+---
+
+# Gate di integrazione (Binario A)
+
+Fonte di verità: [roadmap.md](../../roadmap.md) § Contratto del test di integrazione e § Comandi gate.
+
+## Regola di chiusura fase
+
+- **Non** marcare una fase **Axx** completata né aggiornare checkbox roadmap come `[x]` finché:
+  - esiste il file `tests/integration/Axx.*.test.ts` previsto per quella fase;
+  - il test importa **moduli reali** della fase (non sostituisce il motore/storage con stub interni al test salvo ai bordi);
+  - `pnpm gate Axx` è **verde** (include unit della fase dal manifest quando A01 esiste).
+- Dopo la **prima** chiusura, registrare evidenza in `docs/testing/Axx.md` come da roadmap.
+
+## Test “reale e logico”
+
+- Verifica **risultati osservabili**: file su disco, righe DB, stdout del processo engine, hash, durate vs oracolo fixture A00, policy rete zero in `local_only`, ecc.
+- **Vietato** per i gate A: `test.skip` / `it.skip`; test che mockano l’intero sottosistema sotto test; assert tautologici (`expect(true).toBe(true)`).
+- **Ammesso** ai bordi (roadmap): schermo sintetico, rete, keystore OS, encoder hardware — tramite adapter/porte già definiti.
+
+## Binari B e C
+
+- **B** (Windows live, OpenRouter smoke): `pending` **non** blocca A; non dichiarare “cattura reale verificata” senza evidenza B.
+- **C** (pilot, legale): richiesto solo per `pnpm gate:release`, non per `pnpm gate:all`.
+- Mock macOS/CI **non** sostituisce verifica B.
+
+## Mappa rapida fase → file integrazione
+
+| Fase | File |
+| --- | --- |
+| A00 | `tests/integration/A00.oracle-fixtures.test.ts` |
+| A01 | `tests/integration/A01.monorepo-gates.test.ts` |
+| A02 | `tests/integration/A02.contracts-engine-process.test.ts` |
+| A03 | `tests/integration/A03.sessions-schema.test.ts` |
+| A04 | `tests/integration/A04.crypto-media-jobs.test.ts` |
+| A05 | `tests/integration/A05.synthetic-capture-time.test.ts` |
+| A06 | `tests/integration/A06.model-policy.test.ts` |
+| A07 | `tests/integration/A07.episodes-questions.test.ts` |
+| A08 | `tests/integration/A08.review-metrics-opportunities.test.ts` |
+| A09 | `tests/integration/A09.docx-export.test.ts` |
+| A10 | `tests/integration/A10.desktop-shell.test.ts` |
+| A11 | `tests/integration/A11.video-capture-port.test.ts` |
+| A12 | `tests/integration/A12.hardening-simulated.test.ts` |
+
+Quando implementi una fase, aggiungi/aggiorna prima il test di integrazione che dimostra il comportamento, poi il codice minimo per farlo passare.
