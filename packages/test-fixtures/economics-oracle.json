@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "inputs": {
+    "volumeAnnuo": 12000,
+    "quotaCoperta": 0.7,
+    "tempoPrimaMin": 6,
+    "tempoDopoMin": 2,
+    "costoOrarioEur": 30,
+    "fattoreUtilizzoCapacita": 0.7,
+    "investimentoEur": 6000,
+    "costiRicorrentiAnnuiEur": 3000
+  },
+  "expected": {
+    "orePotenziali": 560,
+    "valoreCapacitaEur": 11760,
+    "beneficioNettoAnnuoEur": 8760,
+    "roiAnno1": 0.306667,
+    "paybackMesi": 8.219178
+  }
+}

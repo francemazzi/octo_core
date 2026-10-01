@@ -1,0 +1,14 @@
+node_modules/
+dist/
+out/
+.vite/
+apps/desktop/dist/
+apps/desktop/.vite/
+*.db
+.env
+.env.*
+coverage/
+test-results/
+playwright-report/
+build-hash.txt
+dist-win/

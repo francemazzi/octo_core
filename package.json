@@ -1,0 +1,45 @@
+{
+  "name": "octo-core",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:replay": "vitest run --config vitest.replay.config.ts",
+    "test:desktop:windows": "node scripts/gates/track-pending.ts B",
+    "test:model:live": "node scripts/gates/track-pending.ts B-live",
+    "gate": "tsx scripts/gates/run.ts",
+    "gate:all": "tsx scripts/gates/run.ts --all",
+    "gate:release": "tsx scripts/gates/run.ts --release",
+    "scan:secrets": "tsx scripts/gates/scan-secrets.ts",
+    "package:win": "tsx scripts/package-win.ts"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  },
+  "devDependencies": {
+    "@octo/capture-adapter": "workspace:*",
+    "@octo/contracts": "workspace:*",
+    "@octo/desktop": "workspace:*",
+    "@octo/engine": "workspace:*",
+    "@octo/test-fixtures": "workspace:*",
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.20.4",
+    "eslint": "10.11.0",
+    "playwright": "1.63.0",
+    "prettier": "3.9.9",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.0",
+    "vitest": "5.0.3"
+  }
+}

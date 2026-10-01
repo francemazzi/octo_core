@@ -238,13 +238,13 @@ Invarianti obbligatorie:
 
 **Obiettivo:** fixture versionate come unica fonte di verità per replay, tempo ed economia; documenti di perimetro non bloccano il codice ma devono esistere prima del pilot (binario C).
 
-- [ ] **A00.01 — Contratto MVP.** `docs/pilot/mvp-scope.md`: persona, processo demo, OS, monitor, dati, deliverable, inclusioni/esclusioni.
-- [ ] **A00.02 — Matrice modalità dati.** `docs/security/data-modes.md`: cosa può lasciare il PC per ogni modalità; `local_only` ≠ AI locale se non implementata.
-- [ ] **A00.03 — Threat model.** `docs/security/threat-model.md`: screenshot, notifiche, titoli, video, chiavi, log, checkpoint, export, cancellazione; mitigazione o rischio residuo per superficie.
-- [ ] **A00.04 — Fixture sessione.** `packages/test-fixtures/session-oracle.json`: ordine A, interruzione B, ritorno A, ricerca codice, attesa dichiarata, tratto `unknown`, due sorgenti monitor; timeline attesa e durate (unione intervalli).
-- [ ] **A00.05 — Fixture economica.** `packages/test-fixtures/economics-oracle.json`: stessi numeri della [sezione 12](#12-fixture-economica-di-riferimento) con decimali JSON (`0.70`).
-- [ ] **A00.06 — Schema Zod delle fixture.** Validazione in `packages/contracts/` o `packages/test-fixtures/`.
-- [ ] **A00.G — Gate A00.** `pnpm gate A00` verde.
+- [x] **A00.01 — Contratto MVP.** `docs/pilot/mvp-scope.md`: persona, processo demo, OS, monitor, dati, deliverable, inclusioni/esclusioni.
+- [x] **A00.02 — Matrice modalità dati.** `docs/security/data-modes.md`: cosa può lasciare il PC per ogni modalità; `local_only` ≠ AI locale se non implementata.
+- [x] **A00.03 — Threat model.** `docs/security/threat-model.md`: screenshot, notifiche, titoli, video, chiavi, log, checkpoint, export, cancellazione; mitigazione o rischio residuo per superficie.
+- [x] **A00.04 — Fixture sessione.** `packages/test-fixtures/session-oracle.json`: ordine A, interruzione B, ritorno A, ricerca codice, attesa dichiarata, tratto `unknown`, due sorgenti monitor; timeline attesa e durate (unione intervalli).
+- [x] **A00.05 — Fixture economica.** `packages/test-fixtures/economics-oracle.json`: stessi numeri della [sezione 12](#12-fixture-economica-di-riferimento) con decimali JSON (`0.70`).
+- [x] **A00.06 — Schema Zod delle fixture.** Validazione in `packages/contracts/` o `packages/test-fixtures/`.
+- [x] **A00.G — Gate A00.** `pnpm gate A00` verde.
 
 **Test di integrazione:** `tests/integration/A00.oracle-fixtures.test.ts` — valida schema; calcola durate attese (no doppio conteggio multi-monitor); ROI, payback e ore potenziali uguali all'oracolo economico.
 
@@ -254,13 +254,13 @@ Invarianti obbligatorie:
 
 **Dipendenze:** A00.
 
-- [ ] **A01.01 — Workspace.** pnpm, TS strict, ESLint, Prettier, lockfile; ADR versioni pin.
-- [ ] **A01.02 — Vitest.** Unit + integration; alias pacchetti.
-- [ ] **A01.03 — Manifest gate.** `scripts/gates/manifest.json`: mappa `Axx` → test integrazione + unit; distingue `automatic`, `hardware`, `human`.
-- [ ] **A01.04 — Script `pnpm gate`.** Fallisce su test mancante o skip nella fase richiesta.
-- [ ] **A01.05 — CI.** Workflow lint, typecheck, unit, integration, replay, `gate:all`; no `.env`/runtime in artefatti.
-- [ ] **A01.06 — Secret scan fixture.** Pattern noti falliscono la CI se commessi.
-- [ ] **A01.G — Gate A01.** `pnpm gate A01` verde; `pnpm gate:all` eseguibile (solo fasi già implementate nel manifest).
+- [x] **A01.01 — Workspace.** pnpm, TS strict, ESLint, Prettier, lockfile; ADR versioni pin.
+- [x] **A01.02 — Vitest.** Unit + integration; alias pacchetti.
+- [x] **A01.03 — Manifest gate.** `scripts/gates/manifest.json`: mappa `Axx` → test integrazione + unit; distingue `automatic`, `hardware`, `human`.
+- [x] **A01.04 — Script `pnpm gate`.** Fallisce su test mancante o skip nella fase richiesta.
+- [x] **A01.05 — CI.** Workflow lint, typecheck, unit, integration, replay, `gate:all`; no `.env`/runtime in artefatti.
+- [x] **A01.06 — Secret scan fixture.** Pattern noti falliscono la CI se commessi.
+- [x] **A01.G — Gate A01.** `pnpm gate A01` verde; `pnpm gate:all` eseguibile (solo fasi già implementate nel manifest).
 
 **Test di integrazione:** `tests/integration/A01.monorepo-gates.test.ts` — `gate A01` passa; simulazione fase assente o skip fa fallire solo quel gate, non l'infrastruttura globale.
 
@@ -270,11 +270,11 @@ Invarianti obbligatorie:
 
 **Dipendenze:** A01.
 
-- [ ] **A02.01 — Pacchetto `contracts`.** Zod per comandi, eventi, errori, versione protocollo.
-- [ ] **A02.02 — Bootstrap engine.** Entry `apps/engine`; readline JSON su stdin/stdout.
-- [ ] **A02.03 — Handshake e shutdown.** Versione, capabilities, chiusura ordinata.
-- [ ] **A02.04 — Interfacce porte.** `CaptureAdapter`, `ModelAdapter`, `MediaStore`, `Clock`, repository (stub).
-- [ ] **A02.G — Gate A02.** `pnpm gate A02` verde.
+- [x] **A02.01 — Pacchetto `contracts`.** Zod per comandi, eventi, errori, versione protocollo.
+- [x] **A02.02 — Bootstrap engine.** Entry `apps/engine`; readline JSON su stdin/stdout.
+- [x] **A02.03 — Handshake e shutdown.** Versione, capabilities, chiusura ordinata.
+- [x] **A02.04 — Interfacce porte.** `CaptureAdapter`, `ModelAdapter`, `MediaStore`, `Clock`, repository (stub).
+- [x] **A02.G — Gate A02.** `pnpm gate A02` verde.
 
 **Test di integrazione:** `tests/integration/A02.contracts-engine-process.test.ts` — client finto → stdin → engine → stdout; payload malformato e versione incompatible rifiutati; kill processo figlio osservabile dal supervisore finto.
 
@@ -284,10 +284,10 @@ Invarianti obbligatorie:
 
 **Dipendenze:** A02.
 
-- [ ] **A03.01 — Migrazioni SQLite.** Entità §6, FK, indici.
-- [ ] **A03.02 — Macchina a stati.** Cattura vs analisi separati; analisi pendente ≠ registrazione attiva.
-- [ ] **A03.03 — Clock a epoche.** Offset monotono per epoca processo.
-- [ ] **A03.G — Gate A03.** `pnpm gate A03` verde.
+- [x] **A03.01 — Migrazioni SQLite.** Entità §6, FK, indici.
+- [x] **A03.02 — Macchina a stati.** Cattura vs analisi separati; analisi pendente ≠ registrazione attiva.
+- [x] **A03.03 — Clock a epoche.** Offset monotono per epoca processo.
+- [x] **A03.G — Gate A03.** `pnpm gate A03` verde.
 
 **Test di integrazione:** `tests/integration/A03.sessions-schema.test.ts` — start ripetuto non duplica sessione; transizione invalida rifiutata; simulazione cambio ora wall-clock non produce durata negativa sugli offset di sessione.
 
@@ -297,11 +297,11 @@ Invarianti obbligatorie:
 
 **Dipendenze:** A03.
 
-- [ ] **A04.01 — `KeyProvider` + AES-GCM.** Implementazione test `InMemoryKeyProvider`; doc limiti metadati in chiaro.
-- [ ] **A04.02 — Media store transazionale.** Scritture atomiche, hash, manifest, asset incompleti.
-- [ ] **A04.03 — Job durevoli.** Lease, retry, backoff, cancel, idempotenza.
-- [ ] **A04.04 — Quote e retention.** Pausa e avviso a soglia disco; no cancellazione silenziosa report approvati.
-- [ ] **A04.G — Gate A04.** `pnpm gate A04` verde.
+- [x] **A04.01 — `KeyProvider` + AES-GCM.** Implementazione test `InMemoryKeyProvider`; doc limiti metadati in chiaro.
+- [x] **A04.02 — Media store transazionale.** Scritture atomiche, hash, manifest, asset incompleti.
+- [x] **A04.03 — Job durevoli.** Lease, retry, backoff, cancel, idempotenza.
+- [x] **A04.04 — Quote e retention.** Pausa e avviso a soglia disco; no cancellazione silenziosa report approvati.
+- [x] **A04.G — Gate A04.** `pnpm gate A04` verde.
 
 **Test di integrazione:** `tests/integration/A04.crypto-media-jobs.test.ts` — manomissione ciphertext rilevata; interruzione mid-write non lascia evidenza `valid`; restart job non duplica effetto; cancel concorrente non resuscita righe eliminate.
 
@@ -311,13 +311,13 @@ Invarianti obbligatorie:
 
 **Dipendenze:** A04.
 
-- [ ] **A05.01 — `SyntheticCaptureAdapter`.** Replay da `session-oracle.json`.
-- [ ] **A05.02 — Selezione sorgenti.** Solo sorgenti autorizzate producono asset.
-- [ ] **A05.03 — Pipeline pre-persist.** Maschere → minimizzazione → cifratura → store.
-- [ ] **A05.04 — Fotogrammi e durata.** Dedup frame; durata tratti stabili conservata.
-- [ ] **A05.05 — Gap ed errori.** Stream terminated, pause, backpressure distinguibili.
-- [ ] **A05.06 — Contesto app opzionale.** Adapter no-op se indisponibile.
-- [ ] **A05.G — Gate A05.** `pnpm gate A05` verde.
+- [x] **A05.01 — `SyntheticCaptureAdapter`.** Replay da `session-oracle.json`.
+- [x] **A05.02 — Selezione sorgenti.** Solo sorgenti autorizzate producono asset.
+- [x] **A05.03 — Pipeline pre-persist.** Maschere → minimizzazione → cifratura → store.
+- [x] **A05.04 — Fotogrammi e durata.** Dedup frame; durata tratti stabili conservata.
+- [x] **A05.05 — Gap ed errori.** Stream terminated, pause, backpressure distinguibili.
+- [x] **A05.06 — Contesto app opzionale.** Adapter no-op se indisponibile.
+- [x] **A05.G — Gate A05.** `pnpm gate A05` verde.
 
 **Test di integrazione:** `tests/integration/A05.synthetic-capture-time.test.ts` — fixture A00 attraverso adapter; totali tempo = oracolo; pattern sensibili assenti; zero asset da sorgente non selezionata.
 
@@ -327,12 +327,12 @@ Invarianti obbligatorie:
 
 **Dipendenze:** A05 (A04 per job).
 
-- [ ] **A06.01 — `ModelAdapter` mock.** Output JSON da fixture; budget e timeout.
-- [ ] **A06.02 — Pacchetti evidenze.** Limiti dimensione; solo ID esistenti.
-- [ ] **A06.03 — Schema output.** Rifiuto evidenze inesistenti, durate inventate, fuori sessione.
-- [ ] **A06.04 — Tre modalità.** Enforcement rete in `local_only` e scope in `cloud_after_review`.
-- [ ] **A06.05 — Prompt injection fixture.** Nessun tool al modello.
-- [ ] **A06.G — Gate A06.** `pnpm gate A06` verde.
+- [x] **A06.01 — `ModelAdapter` mock.** Output JSON da fixture; budget e timeout.
+- [x] **A06.02 — Pacchetti evidenze.** Limiti dimensione; solo ID esistenti.
+- [x] **A06.03 — Schema output.** Rifiuto evidenze inesistenti, durate inventate, fuori sessione.
+- [x] **A06.04 — Tre modalità.** Enforcement rete in `local_only` e scope in `cloud_after_review`.
+- [x] **A06.05 — Prompt injection fixture.** Nessun tool al modello.
+- [x] **A06.G — Gate A06.** `pnpm gate A06` verde.
 
 **Test di integrazione:** `tests/integration/A06.model-policy.test.ts` — spy rete: zero chiamate in `local_only`; solo evidenze approved verso mock in `cloud_after_review`; JSON invalido rifiutato; injection non cambia policy/scope.
 
@@ -342,13 +342,13 @@ Invarianti obbligatorie:
 
 **Dipendenze:** A06.
 
-- [ ] **A07.01 — Grafo analisi.** Preparazione → interpretazione → episodio → domanda → consolidamento.
-- [ ] **A07.02 — Checkpointer SQLite.** `thread_id` = progetto/sessione/versione.
-- [ ] **A07.03 — Episodi interrotti.** A → B → A; tempi separati.
-- [ ] **A07.04 — Quota domande.** Max 3 proattive/giorno default; cooldown; rinvio.
-- [ ] **A07.05 — Interrupt/risposte.** Risposte tardive o cross-episodio ignorate o quarantine.
-- [ ] **A07.06 — Memoria correzioni progetto.** Revocabile; no training cross-client.
-- [ ] **A07.G — Gate A07.** `pnpm gate A07` verde.
+- [x] **A07.01 — Grafo analisi.** Preparazione → interpretazione → episodio → domanda → consolidamento.
+- [x] **A07.02 — Checkpointer SQLite.** `thread_id` = progetto/sessione/versione.
+- [x] **A07.03 — Episodi interrotti.** A → B → A; tempi separati.
+- [x] **A07.04 — Quota domande.** Max 3 proattive/giorno default; cooldown; rinvio.
+- [x] **A07.05 — Interrupt/risposte.** Risposte tardive o cross-episodio ignorate o quarantine.
+- [x] **A07.06 — Memoria correzioni progetto.** Revocabile; no training cross-client.
+- [x] **A07.G — Gate A07.** `pnpm gate A07` verde.
 
 **Test di integrazione:** `tests/integration/A07.episodes-questions.test.ts` — replay fixture: A/B tempi corretti; restart grafo senza domande duplicate; registrazione (simulata) non blocked on model.
 
@@ -358,12 +358,12 @@ Invarianti obbligatorie:
 
 **Dipendenze:** A07.
 
-- [ ] **A08.01 — Editor episodi.** Split, merge, riassign, confirm; transazioni + storico.
-- [ ] **A08.02 — Calcolo durate.** Unioni/intersezioni; pause, gap, unknown.
-- [ ] **A08.03 — `activity.json` canonico.** Schema validato; nomi file non decisi dal modello.
-- [ ] **A08.04 — Opportunity + formule economiche.** Input mancanti = `unknown`.
-- [ ] **A08.05 — Esclusioni retroattive.** Invalidazione derivati; job non ricrea eliminati.
-- [ ] **A08.G — Gate A08.** `pnpm gate A08` verde.
+- [x] **A08.01 — Editor episodi.** Split, merge, riassign, confirm; transazioni + storico.
+- [x] **A08.02 — Calcolo durate.** Unioni/intersezioni; pause, gap, unknown.
+- [x] **A08.03 — `activity.json` canonico.** Schema validato; nomi file non decisi dal modello.
+- [x] **A08.04 — Opportunity + formule economiche.** Input mancanti = `unknown`.
+- [x] **A08.05 — Esclusioni retroattive.** Invalidazione derivati; job non ricrea eliminati.
+- [x] **A08.G — Gate A08.** `pnpm gate A08` verde.
 
 **Test di integrazione:** `tests/integration/A08.review-metrics-opportunities.test.ts` — split/merge senza overlap primario; economics-oracle → 560 h, 11760 EUR capacità, ROI ~30.6667%, payback ~8.22 mesi; input assente resta `unknown`.
 
@@ -373,12 +373,12 @@ Invarianti obbligatorie:
 
 **Dipendenze:** A08 (clip opzionali — non richiede video).
 
-- [ ] **A09.01 — ReportModel versionato.** Snapshot unico per UI/JSON/DOCX.
-- [ ] **A09.02 — Generazione DOCX.** Libreria `docx` [S9]; bozza vs approvato.
-- [ ] **A09.03 — Export tree.** Mapping § mapping export; `indice.html` statico escapato.
-- [ ] **A09.04 — Path safety.** Traversal, nomi ostili, destinazione esplicita.
-- [ ] **A09.05 — Dati mancanti.** Clip assenti dichiarate; rigenerazione = nuova versione.
-- [ ] **A09.G — Gate A09.** `pnpm gate A09` verde.
+- [x] **A09.01 — ReportModel versionato.** Snapshot unico per UI/JSON/DOCX.
+- [x] **A09.02 — Generazione DOCX.** Libreria `docx` [S9]; bozza vs approvato.
+- [x] **A09.03 — Export tree.** Mapping § mapping export; `indice.html` statico escapato.
+- [x] **A09.04 — Path safety.** Traversal, nomi ostili, destinazione esplicita.
+- [x] **A09.05 — Dati mancanti.** Clip assenti dichiarate; rigenerazione = nuova versione.
+- [x] **A09.G — Gate A09.** `pnpm gate A09` verde.
 
 **Test di integrazione:** `tests/integration/A09.docx-export.test.ts` — stesso snapshot → JSON + tree + DOCX coerenti; path traversal fallisce; assenza clip esplicita nel report.
 
@@ -390,13 +390,13 @@ Invarianti obbligatorie:
 
 **Dipendenze:** A09 (motore e contratti da A02–A08).
 
-- [ ] **A10.01 — Electron Forge scaffold.** Main, preload, renderer, capture-renderer placeholder.
-- [ ] **A10.02 — Onboarding.** Nessuna registrazione prima di comando esplicito.
-- [ ] **A10.03 — Mascotte e controlli.** Start/pausa/stop → engine reale via IPC/main.
-- [ ] **A10.04 — Sicurezza Electron.** Sandbox, contextIsolation, CSP, IPC allowlist [S3].
-- [ ] **A10.05 — Chiusura app.** Termina sessione e stream.
-- [ ] **A10.06 — Adapter cattura collegato.** `OCTO_CAPTURE=synthetic` default in test.
-- [ ] **A10.G — Gate A10.** `pnpm gate A10` verde.
+- [x] **A10.01 — Electron Forge scaffold.** Main, preload, renderer, capture-renderer placeholder.
+- [x] **A10.02 — Onboarding.** Nessuna registrazione prima di comando esplicito.
+- [x] **A10.03 — Mascotte e controlli.** Start/pausa/stop → engine reale via IPC/main.
+- [x] **A10.04 — Sicurezza Electron.** Sandbox, contextIsolation, CSP, IPC allowlist [S3].
+- [x] **A10.05 — Chiusura app.** Termina sessione e stream.
+- [x] **A10.06 — Adapter cattura collegato.** `OCTO_CAPTURE=synthetic` default in test.
+- [x] **A10.G — Gate A10.** `pnpm gate A10` verde.
 
 **Test di integrazione:** `tests/integration/A10.desktop-shell.test.ts` — Electron in test (es. Playwright): start → pausa → stop; chiusura app termina sessione; nessun asset con timestamp acquisizione dopo pausa.
 
@@ -408,12 +408,12 @@ Invarianti obbligatorie:
 
 **Dipendenze:** A10.
 
-- [ ] **A11.01 — `MediaEncoder` deterministico.** Test container senza audio.
-- [ ] **A11.02 — Segmenti incompleti.** Marcati non validi; manifest recupero [S5].
-- [ ] **A11.03 — Clip per intervallo.** Riferimenti temporali; tolleranza documentata.
-- [ ] **A11.04 — `ElectronDesktopCaptureAdapter`.** Implementazione dietro stessa interfaccia di A05.
-- [ ] **A11.05 — Packaging dev.** Pacchetto senza Node sul target (binario B per verifica su PC pulito).
-- [ ] **A11.G — Gate A11.** `pnpm gate A11` verde.
+- [x] **A11.01 — `MediaEncoder` deterministico.** Test container senza audio.
+- [x] **A11.02 — Segmenti incompleti.** Marcati non validi; manifest recupero [S5].
+- [x] **A11.03 — Clip per intervallo.** Riferimenti temporali; tolleranza documentata.
+- [x] **A11.04 — `ElectronDesktopCaptureAdapter`.** Implementazione dietro stessa interfaccia di A05.
+- [x] **A11.05 — Packaging dev.** Pacchetto senza Node sul target (binario B per verifica su PC pulito).
+- [x] **A11.G — Gate A11.** `pnpm gate A11` verde.
 
 **Test di integrazione:** `tests/integration/A11.video-capture-port.test.ts` — frame sintetici minimizzati → media senza audio; segmento non finalizzato ≠ valid.
 
@@ -425,11 +425,11 @@ Invarianti obbligatorie:
 
 **Dipendenze:** A11.
 
-- [ ] **A12.01 — Fault injection simulata.** Engine kill, disco pieno, offline rete.
-- [ ] **A12.02 — Cancellazione perimetro.** Marker sintetici assenti post-delete; job non ricrea.
-- [ ] **A12.03 — Diagnostica.** Log senza pixel; guida stop/revoca/cancel.
-- [ ] **A12.04 — `package:win` dev.** Non firmato; hash build registrato.
-- [ ] **A12.G — Gate A12.** `pnpm gate A12` verde.
+- [x] **A12.01 — Fault injection simulata.** Engine kill, disco pieno, offline rete.
+- [x] **A12.02 — Cancellazione perimetro.** Marker sintetici assenti post-delete; job non ricrea.
+- [x] **A12.03 — Diagnostica.** Log senza pixel; guida stop/revoca/cancel.
+- [x] **A12.04 — `package:win` dev.** Non firmato; hash build registrato.
+- [x] **A12.G — Gate A12.** `pnpm gate A12` verde.
 
 **Test di integrazione:** `tests/integration/A12.hardening-simulated.test.ts` — disco pieno → pausa senza wipe report approvati; offline → job AI queued; post-cancellazione scan marker vuoto.
 

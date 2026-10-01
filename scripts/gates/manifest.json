@@ -1,0 +1,92 @@
+{
+  "tracks": {
+    "B": { "status": "pending" },
+    "C": { "status": "pending" }
+  },
+  "phases": {
+    "A00": {
+      "track": "automatic",
+      "integration": "tests/integration/A00.oracle-fixtures.test.ts",
+      "unit": [
+        "apps/engine/src/domain/time.unit.test.ts",
+        "apps/engine/src/domain/economics.unit.test.ts"
+      ],
+      "evidenceRequired": true
+    },
+    "A01": {
+      "track": "automatic",
+      "integration": "tests/integration/A01.monorepo-gates.test.ts",
+      "unit": [
+        "scripts/gates/inspect.unit.test.ts",
+        "scripts/gates/scan-secrets.unit.test.ts"
+      ],
+      "evidenceRequired": true
+    },
+    "A02": {
+      "track": "automatic",
+      "integration": "tests/integration/A02.contracts-engine-process.test.ts",
+      "unit": [],
+      "evidenceRequired": true
+    },
+    "A03": {
+      "track": "automatic",
+      "integration": "tests/integration/A03.sessions-schema.test.ts",
+      "unit": ["apps/engine/src/sessions/machine.unit.test.ts"],
+      "evidenceRequired": true
+    },
+    "A04": {
+      "track": "automatic",
+      "integration": "tests/integration/A04.crypto-media-jobs.test.ts",
+      "unit": [],
+      "evidenceRequired": true
+    },
+    "A05": {
+      "track": "automatic",
+      "integration": "tests/integration/A05.synthetic-capture-time.test.ts",
+      "unit": [],
+      "evidenceRequired": true
+    },
+    "A06": {
+      "track": "automatic",
+      "integration": "tests/integration/A06.model-policy.test.ts",
+      "unit": [],
+      "evidenceRequired": true
+    },
+    "A07": {
+      "track": "automatic",
+      "integration": "tests/integration/A07.episodes-questions.test.ts",
+      "unit": ["apps/engine/src/analysis/questions.unit.test.ts"],
+      "evidenceRequired": true
+    },
+    "A08": {
+      "track": "automatic",
+      "integration": "tests/integration/A08.review-metrics-opportunities.test.ts",
+      "unit": [],
+      "evidenceRequired": true
+    },
+    "A09": {
+      "track": "automatic",
+      "integration": "tests/integration/A09.docx-export.test.ts",
+      "unit": ["apps/engine/src/reports/paths.unit.test.ts"],
+      "evidenceRequired": true
+    },
+    "A10": {
+      "track": "automatic",
+      "integration": "tests/integration/A10.desktop-shell.test.ts",
+      "unit": [],
+      "evidenceRequired": true
+    },
+    "A11": {
+      "track": "automatic",
+      "integration": "tests/integration/A11.video-capture-port.test.ts",
+      "unit": [],
+      "evidenceRequired": true
+    },
+    "A12": {
+      "track": "automatic",
+      "integration": "tests/integration/A12.hardening-simulated.test.ts",
+      "unit": [],
+      "evidenceRequired": true
+    }
+  }
+}

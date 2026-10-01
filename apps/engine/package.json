@@ -1,0 +1,19 @@
+{
+  "name": "@octo/engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@langchain/core": "1.2.14",
+    "@langchain/langgraph": "1.4.18",
+    "@langchain/langgraph-checkpoint": "1.1.5",
+    "@octo/capture-adapter": "workspace:*",
+    "@octo/contracts": "workspace:*",
+    "@octo/test-fixtures": "workspace:*",
+    "docx": "9.8.1",
+    "zod": "4.6.5"
+  }
+}

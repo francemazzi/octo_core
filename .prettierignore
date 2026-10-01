@@ -1,0 +1,6 @@
+node_modules
+dist
+pnpm-lock.yaml
+logo_octo.png
+roadmap.md
+*.md

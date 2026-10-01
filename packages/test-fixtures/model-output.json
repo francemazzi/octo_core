@@ -1,0 +1,16 @@
+{
+  "episodes": [
+    {
+      "episodeId": "episode-A",
+      "activityType": "order_entry",
+      "evidenceIds": ["ev-frame-a1", "ev-frame-a1-mon2", "ev-frame-search"],
+      "durationMs": 1500000
+    },
+    {
+      "episodeId": "episode-B",
+      "activityType": "interruption",
+      "evidenceIds": ["ev-frame-b"],
+      "durationMs": 300000
+    }
+  ]
+}
