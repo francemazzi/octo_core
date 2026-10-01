@@ -4,9 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import packager from "@electron/packager";
 
-const version = "1.0.0";
 const root = process.cwd();
 const desktopDir = join(root, "apps/desktop");
+const desktopPackage = JSON.parse(readFileSync(join(desktopDir, "package.json"), "utf8")) as {
+  version: string;
+};
+const version = desktopPackage.version;
 const outDir = join(root, "release", version);
 const iconDir = join(tmpdir(), "octo-icons");
 
@@ -169,6 +172,6 @@ for (const target of selected) {
 
 writeFileSync(
   join(outDir, "UNSIGNED.txt"),
-  "Octo Core 1.0.0 is not code-signed. macOS and Windows will show a security warning.\n",
+  `Octo Core ${version} is not code-signed. macOS and Windows will show a security warning.\n`,
 );
 process.stdout.write(`${artifacts.join("\n")}\n`);

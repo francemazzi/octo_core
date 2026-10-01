@@ -1,6 +1,6 @@
 {
   "name": "@octo/desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Octo Core desktop shell",
   "private": true,
   "type": "module",
