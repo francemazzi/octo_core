@@ -25,15 +25,30 @@ const state: UiState = {
   ],
 };
 
-const repoRoot = process.env.OCTO_REPO_ROOT ?? join(here, "..", "..", "..");
 const dataDir = process.env.OCTO_DATA_DIR ?? join(app.getPath("userData"), "octo");
-const engineEntry = process.env.OCTO_ENGINE_ENTRY ?? join(repoRoot, "apps/engine/src/main.ts");
 
-const child: ChildProcessWithoutNullStreams = spawn("pnpm", ["exec", "tsx", engineEntry], {
-  cwd: repoRoot,
-  env: { ...process.env, OCTO_DATA_DIR: dataDir, OCTO_CAPTURE: "synthetic" },
-  stdio: ["pipe", "pipe", "pipe"],
-});
+function startEngine(): ChildProcessWithoutNullStreams {
+  const env = {
+    ...process.env,
+    OCTO_DATA_DIR: dataDir,
+    OCTO_CAPTURE: process.env.OCTO_CAPTURE ?? "synthetic",
+  };
+  if (app.isPackaged) {
+    return spawn(process.execPath, [join(process.resourcesPath, "engine.mjs")], {
+      env: { ...env, ELECTRON_RUN_AS_NODE: "1" },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  }
+  const repoRoot = process.env.OCTO_REPO_ROOT ?? join(here, "..", "..", "..");
+  const engineEntry = process.env.OCTO_ENGINE_ENTRY ?? join(repoRoot, "apps/engine/src/main.ts");
+  return spawn("pnpm", ["exec", "tsx", engineEntry], {
+    cwd: repoRoot,
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+}
+
+const child = startEngine();
 
 const pending = new Map<
   string,

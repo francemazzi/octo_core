@@ -1,5 +1,6 @@
 {
   "name": "octo-core",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -18,7 +19,8 @@
     "gate:all": "tsx scripts/gates/run.ts --all",
     "gate:release": "tsx scripts/gates/run.ts --release",
     "scan:secrets": "tsx scripts/gates/scan-secrets.ts",
-    "package:win": "tsx scripts/package-win.ts"
+    "package:win": "tsx scripts/package-win.ts",
+    "package:release": "tsx scripts/package-release.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -27,6 +29,7 @@
     ]
   },
   "devDependencies": {
+    "@electron/packager": "18.4.4",
     "@octo/capture-adapter": "workspace:*",
     "@octo/contracts": "workspace:*",
     "@octo/desktop": "workspace:*",
