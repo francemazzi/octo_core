@@ -8,7 +8,7 @@ Octo Core è un progetto di app desktop Windows-first per documentare come si sv
 
 L'obiettivo è capire **dove viene impiegato tempo, quali passaggi si ripetono e quali miglioramenti meritano una verifica**, senza confondere l'attività sul computer con la produttività della persona.
 
-> **Stato: progettazione dell'MVP.** Il repository contiene la documentazione iniziale; l'applicazione, l'installer e le funzionalità descritte non sono ancora implementati. Questa pagina presenta il prodotto previsto. Attività, dipendenze, test e criteri di completamento sono definiti nella [roadmap](./roadmap.md).
+> **Stato: progettazione dell'MVP.** Il repository contiene la documentazione iniziale; l'applicazione, l'installer e le funzionalità descritte non sono ancora implementati. L'implementazione segue la [roadmap](./roadmap.md) (fasi **A00–A12**, binario automatico).
 
 ## Perché esiste
 
@@ -50,7 +50,7 @@ L'unità centrale è l'**episodio di attività**: una specifica esecuzione, come
 
 Ogni episodio comprenderà obiettivo, intervalli temporali, passaggi, applicazioni coinvolte, evidenze, eventuali eccezioni e stato della revisione. Episodi simili saranno raggruppati per tipo di attività.
 
-Esempio di esportazione prevista, non di file già disponibili:
+Esempio di esportazione prevista:
 
 ```text
 sessione-001/
@@ -70,48 +70,28 @@ Il DOCX riassumerà il perimetro osservato, le attività, i tempi, le evidenze p
 
 Le valutazioni economiche richiederanno input aggiuntivi, come volumi, costi, fattibilità e tempo di controllo residuo. Il tempo potenzialmente liberato non sarà presentato automaticamente come risparmio di cassa.
 
-## Architettura prevista
+## Architettura (sintesi)
+
+Dettaglio, invarianti e fasi in [roadmap.md](./roadmap.md).
 
 | Componente | Scelta |
 | --- | --- |
-| **Desktop e interfaccia** | Electron + React + TypeScript; dashboard e mascotte separate |
-| **Acquisizione** | Adattatore Electron per monitor e finestre; renderer dedicato alla cattura |
-| **Motore locale** | Node.js/TypeScript in un processo separato, con IPC tipizzata |
-| **Contratti** | Zod e tipi condivisi tra interfaccia e motore |
-| **Persistenza** | SQLite, migrazioni SQL e archivio locale cifrato per i media |
-| **Analisi** | LangGraph.js, checkpoint persistenti e adapter OpenRouter |
-| **Report** | Libreria TypeScript `docx`, a partire da dati strutturati e validati |
-| **Verifiche e distribuzione** | Vitest, test di integrazione, replay, prove su Windows reale ed Electron Forge |
-
-Fastify sarà introdotto soltanto se servirà un client HTTP concreto. L'MVP non richiede un server remoto, PostgreSQL, Redis o un database a grafo. Un eventuale componente nativo Windows verrà valutato sulla base dei limiti emersi nei test.
-
-Struttura del codice prevista:
-
-```text
-apps/
-  desktop/          # Electron, dashboard, mascotte e acquisizione
-  engine/           # Dominio, job, analisi, archivio e report
-packages/
-  contracts/        # Schemi e messaggi condivisi
-  capture-adapter/  # Interfaccia sostituibile di acquisizione
-  test-fixtures/    # Dati sintetici e sessioni annotate
-native/
-  windows-context/  # Opzionale, solo se giustificato dalle prove
-docs/               # Decisioni, sicurezza, test e pilot
-tests/              # Integrazione, replay, desktop e valutazioni AI
-scripts/
-  gates/            # Verifiche di completamento delle fasi
-```
+| **Desktop** | Electron + React + TypeScript; dashboard e mascotte separate |
+| **Motore** | Processo Node figlio; JSON newline-delimited su stdin/stdout; testabile senza Electron |
+| **Contratti** | Zod condivisi (`packages/contracts`) |
+| **Persistenza** | SQLite; media cifrati (AES-GCM, `KeyProvider`; in produzione chiavi avvolte con `safeStorage`) |
+| **Cattura** | `CaptureAdapter` — sintetico in sviluppo/test; Electron reale in fase A11 |
+| **Analisi** | LangGraph.js + `ModelAdapter` (mock/default `local_only`; OpenRouter opzionale) |
+| **Report** | `docx` da ReportModel validato |
+| **Verifica** | Vitest; **un test di integrazione per fase A**; replay; Windows/live solo binario B |
 
 ## Dati locali e analisi AI
 
-La registrazione locale e l'invio ai modelli sono due operazioni distinte. Le modalità previste sono:
-
 | Modalità | Comportamento |
 | --- | --- |
-| `local_only` | Predefinita: acquisizione e revisione locale, senza inviare evidenze ai modelli remoti. Non implica la presenza di un modello AI locale. |
+| `local_only` | Predefinita: acquisizione e revisione locale, senza inviare evidenze ai modelli remoti. |
 | `cloud_after_review` | Analisi remota soltanto delle evidenze approvate dopo la revisione. |
-| `cloud_live_authorized` | Analisi remota durante la sessione, nel perimetro autorizzato, per abilitare anche domande contestuali. |
+| `cloud_live_authorized` | Analisi remota durante la sessione, nel perimetro autorizzato. |
 
 OpenRouter sarà configurato con modelli e provider ammessi. Un errore o un endpoint non disponibile non dovrà attivare un invio alternativo non autorizzato. Senza rete, i job remoti resteranno in coda e lo stato sarà visibile.
 
@@ -123,22 +103,43 @@ OpenRouter sarà configurato con modelli e provider ammessi. Un errore o un endp
 - **Minimizzazione e sicurezza.** Maschere prima del salvataggio o dell'invio, accessi limitati, retention e cancellazione dei derivati. Nessun dato aziendale, segreto o media reale in Git e negli artefatti CI.
 - **Separazione tra osservazione e azione.** Il modello interpreta contenuti non affidabili; non riceve strumenti per eseguire comandi o modificare i sistemi osservati.
 
-Questi sono requisiti da implementare e verificare, non certificazioni già ottenute. Prima di qualsiasi pilot con dati aziendali reali è prevista una verifica del perimetro tecnico, organizzativo e giuridico. La prima demo utilizzerà esclusivamente dati sintetici.
+Prima di qualsiasi pilot con dati aziendali reali è prevista una verifica del perimetro (binario C nella roadmap). La prima demo utilizzerà esclusivamente dati sintetici.
 
 ## Perimetro dell'MVP
 
-**Target iniziale:** Windows 11 x64, un operatore, uno o due monitor e sessioni dimostrative di 60–90 minuti. Il supporto dovrà essere verificato su un PC rappresentativo del cliente.
+**Target iniziale:** Windows 11 x64, un operatore, uno o due monitor e sessioni dimostrative di 60–90 minuti.
 
 L'acquisizione riguarda il contenuto visibile delle sorgenti autorizzate: non comporta accesso a finestre mai aperte, database, schermate sicure o contenuti protetti.
 
-**Fuori perimetro:** automazione autonoma del PC, scrittura nei gestionali, keylogging, clipboard, audio, webcam, registrazione nascosta, classifiche dei dipendenti, training sui dati dei clienti e backend multi-tenant. macOS, Linux, Citrix e Remote Desktop non sono obiettivi di compatibilità garantita per questo MVP.
+**Fuori perimetro:** automazione autonoma del PC, keylogging, clipboard, audio, webcam, registrazione nascosta, classifiche dei dipendenti, training sui dati dei clienti e backend multi-tenant. macOS, Linux, Citrix e Remote Desktop non sono obiettivi di compatibilità garantita per questo MVP.
 
-## Sviluppo e verifica
+## Esecuzione e milestone
 
-La [roadmap](./roadmap.md) è il riferimento operativo. Ogni checkbox ha un identificativo e una verifica; una fase si conclude soltanto quando passa il relativo gate e sono disponibili le evidenze richieste.
+Lo **sviluppo del binario A** (implementazione continua) è pensato per girare su **macOS e CI**: cattura sintetica, mock del modello, nessuna rete obbligatoria. Le prove su **PC Windows**, lo **smoke OpenRouter** e le **approvazioni umane** sono binari **B** e **C**: possono restare `pending` senza bloccare le fasi A.
 
-I test deterministici non devono richiedere rete o chiamate a pagamento. Le prove con modelli reali e con un desktop Windows interattivo sono verifiche separate: un mock non dimostra che la cattura o l'analisi reale funzionino.
+Ogni fase **A00–A12** si chiude solo quando passa `pnpm gate Axx`, cioè un **test di integrazione deterministico** nominato in roadmap (più i test unitari della fase). Il dettaglio è in [roadmap.md § Contratto del test di integrazione](./roadmap.md#3-contratto-del-test-di-integrazione).
 
-Non sono ancora disponibili comandi di avvio, build o installazione dell'app. Verranno documentati quando il relativo codice sarà presente e verificato.
+| Milestone | Fasi A | Risultato dimostrabile (automatico) |
+| --- | --- | --- |
+| **M0 — Flusso sintetico** | A00–A05 | Fixture oracolo, archivio, tempo e evidenze da cattura sintetica |
+| **M1 — Intelligenza e export** | A06–A09 | Episodi, policy AI mock, revisione, DOCX e cartelle |
+| **M2 — Desktop e hardening** | A10–A12 | Shell Electron, video/porta cattura, fault simulati |
 
-**Primo traguardo:** ricostruire una sessione reale di prova con poche correzioni, tempi riconciliati e un DOCX dal quale sia possibile capire quale problema approfondire. Registrare più ore, da solo, non dimostra il valore del prodotto.
+Il **pilot** non è una milestone di codice: richiede A12 verde e `pnpm gate:release` (binari B + C).
+
+### Comandi (contratto da fase A01)
+
+Disponibili quando la fase **A01** è implementata e verificata:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm lint && pnpm typecheck
+pnpm test:unit
+pnpm test:integration
+pnpm test:replay
+pnpm gate Axx        # es. pnpm gate A05
+pnpm gate:all        # tutte le fasi A nel manifest
+pnpm gate:release    # pilot: Windows, modello live, checklist umane
+```
+
+**Primo traguardo di prodotto (M1):** ricostruire la sessione della fixture oracolo con poche correzioni, tempi riconciliati con l'unione degli intervalli e un DOCX da cui capire quale problema approfondire — dimostrato dai gate A07–A09, senza dipendere da hardware Windows.
