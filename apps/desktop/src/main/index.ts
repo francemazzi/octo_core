@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, nativeImage, type NativeImage } from "electron";
 import { join } from "node:path";
 
 declare const __dirname: string;
@@ -86,11 +86,20 @@ function publish(): void {
 
 let mascot: BrowserWindow | undefined;
 let quitting = false;
+child.on("exit", () => {
+  if (!quitting) app.exit(1);
+});
+
+function logoImage(): NativeImage {
+  return nativeImage.createFromPath(join(here, "renderer", "logo_octo.png"));
+}
 
 function createWindow(view: "dashboard" | "mascot"): BrowserWindow {
   const window = new BrowserWindow({
     width: view === "mascot" ? 220 : 420,
     height: view === "mascot" ? 260 : 520,
+    title: "Octo",
+    icon: logoImage(),
     alwaysOnTop: view === "mascot",
     resizable: false,
     webPreferences: {
@@ -121,7 +130,11 @@ async function stopIfNeeded(): Promise<void> {
   }
 }
 
+app.setName("Octo Core");
+if (process.platform === "win32") app.setAppUserModelId("it.octo.core");
+
 app.whenReady().then(() => {
+  if (process.platform === "darwin") app.dock?.setIcon(logoImage());
   for (const channel of ALLOWED) {
     ipcMain.handle(channel, async (_event, payload: unknown) => {
       if (channel === "octo:getState") return state;
@@ -172,6 +185,10 @@ app.whenReady().then(() => {
 
   createWindow("dashboard");
   void request({ cmd: "handshake", clientVersion: 1 });
+});
+
+app.on("window-all-closed", () => {
+  app.quit();
 });
 
 app.on("before-quit", (event) => {

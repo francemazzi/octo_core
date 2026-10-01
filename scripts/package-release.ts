@@ -126,6 +126,15 @@ for (const target of selected) {
     asar: true,
     appVersion: version,
     icon,
+    ...(target.platform === "darwin"
+      ? {
+          extendInfo: {
+            CFBundleDisplayName: "Octo",
+            CFBundleName: "Octo",
+            CFBundleIconFile: "octo.icns",
+          },
+        }
+      : {}),
     extraResource: [join(desktopDir, "dist/engine.mjs")],
     ignore: (filePath) => {
       const relative = filePath.replaceAll("\\", "/");
@@ -137,6 +146,17 @@ for (const target of selected) {
   });
   const folder = packaged[0];
   if (!folder) throw new Error(`empty package for ${target.label}`);
+  if (target.platform === "darwin") {
+    const appPath = join(folder, "Octo Core.app");
+    execFileSync("plutil", [
+      "-replace",
+      "CFBundleDisplayName",
+      "-string",
+      "Octo",
+      join(appPath, "Contents", "Info.plist"),
+    ]);
+    rmSync(join(appPath, "Contents", "Resources", "electron.icns"), { force: true });
+  }
   const zipPath = join(outDir, `OctoCore-${version}-${target.label}.zip`);
   zip(folder, zipPath);
   artifacts.push(zipPath);
