@@ -179,6 +179,9 @@ export const engineCommandSchema = z.discriminatedUnion("cmd", [
     status: z.enum(["draft", "approved"]),
   }),
   z.object({ v: z.number(), id: z.string(), cmd: z.literal("diagnostics.log") }),
+  z.object({ v: z.number(), id: z.string(), cmd: z.literal("model.status") }),
+  z.object({ v: z.number(), id: z.string(), cmd: z.literal("analysis.local") }),
+  z.object({ v: z.number(), id: z.string(), cmd: z.literal("report.tick") }),
   z.object({ v: z.number(), id: z.string(), cmd: z.literal("session.delete") }),
 ]);
 

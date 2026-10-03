@@ -27,6 +27,7 @@ describe("A10 desktop shell", () => {
         ...process.env,
         OCTO_DATA_DIR: dataDir,
         OCTO_CAPTURE: "synthetic",
+        OCTO_MODEL: "off",
         OCTO_REPO_ROOT: process.cwd(),
       },
     });
@@ -34,7 +35,7 @@ describe("A10 desktop shell", () => {
     await page.getByRole("checkbox", { name: "Schermo 1" }).check();
     await page.getByRole("button", { name: "Avvia" }).click();
     await page.getByRole("button", { name: "Pausa" }).waitFor();
-    expect(app.windows().length).toBeGreaterThan(1);
+    await expect.poll(() => app.windows().length, { timeout: 5_000 }).toBeGreaterThan(1);
     await page.getByRole("button", { name: "Pausa" }).click();
     await page.getByText("In pausa").waitFor();
     await page.getByRole("button", { name: "Stop" }).click();

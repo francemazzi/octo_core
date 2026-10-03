@@ -2,6 +2,7 @@ type Capture = "idle" | "recording" | "paused" | "stopped";
 
 type UiState = {
   capture: Capture;
+  note: string;
   sources: Array<{ id: string; label: string; selected: boolean }>;
 };
 

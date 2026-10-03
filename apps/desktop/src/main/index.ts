@@ -12,6 +12,7 @@ type Capture = "idle" | "recording" | "paused" | "stopped";
 
 type UiState = {
   capture: Capture;
+  note: string;
   sources: Array<{ id: string; label: string; selected: boolean }>;
 };
 
@@ -19,6 +20,7 @@ const ALLOWED = new Set(["octo:getState", "octo:start", "octo:pause", "octo:stop
 
 const state: UiState = {
   capture: "idle",
+  note: "",
   sources: [
     { id: "mon-1", label: "Schermo 1", selected: false },
     { id: "mon-2", label: "Schermo 2", selected: false },
@@ -65,11 +67,14 @@ createInterface({ input: child.stdout }).on("line", (line) => {
   pending.delete(reply.id);
 });
 
-function request(command: Record<string, unknown>): Promise<{ ok: boolean; result?: unknown }> {
+function request(
+  command: Record<string, unknown>,
+  timeoutMs = 10_000,
+): Promise<{ ok: boolean; result?: unknown }> {
   const id = randomUUID();
   child.stdin.write(`${JSON.stringify({ v: 1, id, ...command })}\n`);
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("engine timeout")), 10_000);
+    const timer = setTimeout(() => reject(new Error("engine timeout")), timeoutMs);
     pending.set(id, (reply) => {
       clearTimeout(timer);
       if (!reply.ok) reject(new Error(reply.error?.message ?? "engine error"));
@@ -130,6 +135,42 @@ async function stopIfNeeded(): Promise<void> {
   }
 }
 
+let finishing: Promise<void> | undefined;
+
+function finishSession(): Promise<void> {
+  finishing ??= finishSessionOnce().finally(() => {
+    finishing = undefined;
+  });
+  return finishing;
+}
+
+async function finishSessionOnce(): Promise<void> {
+  await stopIfNeeded();
+  if (state.capture !== "stopped" || process.env.OCTO_MODEL === "off") return;
+  try {
+    const analysis = await request({ cmd: "analysis.local" }, 120_000);
+    const report = await request({ cmd: "report.tick" }, 30_000);
+    state.note = statusNote(analysis.result, report.result);
+  } catch {
+    state.note = "Analisi non riuscita.";
+  }
+}
+
+function statusNote(analysis: unknown, report: unknown): string {
+  const extracted = analysis as { episodes?: number; reason?: string; model?: string | null };
+  const written = report as { issued?: boolean; path?: string | null };
+  const model = extracted.model ? `Ollama acceso (${extracted.model}).` : "Ollama spento.";
+  const episodes =
+    extracted.reason === "analyzed" || extracted.reason === "already_analyzed"
+      ? `Episodi estratti: ${extracted.episodes ?? 0}.`
+      : "Nessun episodio estratto.";
+  const cadence =
+    written.issued && written.path
+      ? `Mini report: ${written.path}`
+      : "Prossimo mini report tra 3 giorni.";
+  return `${model} ${episodes} ${cadence}`;
+}
+
 app.setName("Octo Core");
 if (process.platform === "win32") app.setAppUserModelId("it.octo.core");
 
@@ -177,14 +218,23 @@ app.whenReady().then(() => {
         publish();
         return state;
       }
-      await stopIfNeeded();
+      await finishSession();
       publish();
       return state;
     });
   }
 
   createWindow("dashboard");
-  void request({ cmd: "handshake", clientVersion: 1 });
+  void request({ cmd: "handshake", clientVersion: 1 })
+    .then(() => request({ cmd: "model.status" }))
+    .then((reply) => {
+      if (process.env.OCTO_MODEL === "off") return;
+      const status = reply.result as { up?: boolean; model?: string | null };
+      state.note =
+        status.up && status.model ? `Ollama acceso (${status.model}).` : "Ollama spento.";
+      publish();
+    })
+    .catch(() => undefined);
 });
 
 app.on("window-all-closed", () => {
@@ -195,7 +245,7 @@ app.on("before-quit", (event) => {
   if (quitting) return;
   event.preventDefault();
   quitting = true;
-  void stopIfNeeded()
+  void finishSession()
     .then(() => request({ cmd: "shutdown" }))
     .finally(() => app.exit(0));
 });

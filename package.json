@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:ollama": "vitest run --config vitest.ollama.config.ts",
     "test:replay": "vitest run --config vitest.replay.config.ts",
     "test:desktop:windows": "node scripts/gates/track-pending.ts B",
     "test:model:live": "node scripts/gates/track-pending.ts B-live",

@@ -5,8 +5,7 @@ export default defineConfig({
     environment: "node",
     env: { NODE_NO_WARNINGS: "1" },
     fileParallelism: false,
-    include: ["tests/integration/**/*.test.ts"],
-    exclude: ["tests/integration/**/*.live.test.ts"],
+    include: ["tests/integration/**/*.live.test.ts"],
     testTimeout: 180_000,
   },
 });

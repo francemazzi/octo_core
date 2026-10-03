@@ -28,6 +28,12 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
       return engine.ingestFrame(command);
     case "analysis.run":
       return engine.runAnalysis(command.mode);
+    case "model.status":
+      return engine.modelStatus();
+    case "analysis.local":
+      return engine.analyzeLocal();
+    case "report.tick":
+      return engine.reportTick();
     case "question.answer":
       return engine.answerQuestion(command);
     case "question.defer":

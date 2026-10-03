@@ -16,6 +16,9 @@ import { assertSingleEpoch, durationFromOffsets } from "./sessions/clock.js";
 import { assertCaptureTransition, type CaptureState } from "./sessions/machine.js";
 import { OctoError } from "./errors.js";
 import { runSessionGraph } from "./analysis/graph.js";
+import { analyzeLocalSession } from "./analysis/local-analysis.js";
+import { probeOllama } from "./analysis/ollama.js";
+import { tickMiniReport } from "./reports/cadence.js";
 import { answerQuestion, deferQuestion } from "./analysis/questions.js";
 import { JobRunner, type JobRow } from "./jobs/runner.js";
 import { applyRetention, evaluateQuota } from "./jobs/quota.js";
@@ -286,6 +289,22 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
         epochId: session.epoch_id,
         wall: nowWall(),
       });
+    },
+    async modelStatus() {
+      if (process.env.OCTO_MODEL === "off") return { up: false, model: null };
+      return probeOllama();
+    },
+    analyzeLocal() {
+      const session = requireSession();
+      return analyzeLocalSession({
+        db,
+        sessionId: session.id,
+        sessionDurationMs: this.durationMs(),
+        readText: (assetId) => media.readPlaintext(assetId).toString("utf8"),
+      });
+    },
+    reportTick(nowMs = Date.now()) {
+      return tickMiniReport({ db, dataDir, nowMs });
     },
     async runAnalysis(mode: "local_only" | "cloud_after_review" | "cloud_live_authorized") {
       const session = requireSession();

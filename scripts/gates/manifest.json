@@ -49,7 +49,10 @@
     "A06": {
       "track": "automatic",
       "integration": "tests/integration/A06.model-policy.test.ts",
-      "unit": [],
+      "unit": [
+        "apps/engine/src/analysis/ollama.unit.test.ts",
+        "apps/engine/src/reports/cadence.unit.test.ts"
+      ],
       "evidenceRequired": true
     },
     "A07": {

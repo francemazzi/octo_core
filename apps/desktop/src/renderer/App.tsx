@@ -4,11 +4,13 @@ type Capture = "idle" | "recording" | "paused" | "stopped";
 
 type UiState = {
   capture: Capture;
+  note: string;
   sources: Array<{ id: string; label: string; selected: boolean }>;
 };
 
 const initial: UiState = {
   capture: "idle",
+  note: "",
   sources: [
     { id: "mon-1", label: "Schermo 1", selected: false },
     { id: "mon-2", label: "Schermo 2", selected: false },
@@ -71,6 +73,7 @@ export function App() {
           </button>
         </>
       ) : null}
+      {view !== "mascot" && state.note ? <p>{state.note}</p> : null}
     </main>
   );
 }
