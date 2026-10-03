@@ -14,10 +14,10 @@ export class EngineProcess {
   readonly child: ChildProcessWithoutNullStreams;
   private readonly pending = new Map<string, (reply: EngineReply) => void>();
 
-  constructor(dataDir: string) {
+  constructor(dataDir: string, env: Record<string, string> = {}) {
     this.child = spawn("pnpm", ["exec", "tsx", "apps/engine/src/main.ts"], {
       cwd: process.cwd(),
-      env: { ...process.env, OCTO_DATA_DIR: dataDir, NODE_NO_WARNINGS: "1" },
+      env: { ...process.env, OCTO_DATA_DIR: dataDir, NODE_NO_WARNINGS: "1", ...env },
       stdio: ["pipe", "pipe", "pipe"],
     });
     const lines = createInterface({ input: this.child.stdout });

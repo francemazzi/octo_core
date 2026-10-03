@@ -1,201 +1,197 @@
 import { randomUUID } from "node:crypto";
-import {
-  Annotation,
-  END,
-  START,
-  StateGraph,
-  interrupt,
-  isGraphInterrupt,
-  isInterrupted,
-} from "@langchain/langgraph";
-import { loadModelOutputFixture, loadSessionOracle } from "@octo/test-fixtures";
-import { summarizeAssignedTime, type Stretch } from "../domain/time.js";
-import type { Sql } from "../storage/db.js";
+import { Annotation, Command, END, START, StateGraph, interrupt } from "@langchain/langgraph";
+import type { ModelOutput } from "@octo/contracts";
+import { z } from "zod";
+import { sessionDurationMs } from "../sessions/clock.js";
 import { NodeSqliteSaver } from "./checkpointer.js";
-import { acceptModelOutput, evidenceIdsForMode, type DataMode } from "./policy.js";
-import { askProactiveQuestion } from "./questions.js";
+import { loadFrames, writeEpisodes } from "./episodes.js";
+import { adapterFor, interpretSession, type InterpretDeps } from "./interpret.js";
+import type { DataMode } from "./policy.js";
+import { askProactiveQuestion, findQuestion, questionIdFor, questionLimits } from "./questions.js";
 
 const GraphState = Annotation.Root({
   sessionId: Annotation<string>,
   projectId: Annotation<string>,
-  mode: Annotation<string>,
+  mode: Annotation<DataMode>,
   stage: Annotation<string>,
+  reason: Annotation<string | null>,
+  model: Annotation<string | null>,
+  output: Annotation<ModelOutput | null>,
+  questionId: Annotation<string | null>,
 });
 
-export type AnalysisRunResult = {
-  interrupted: boolean;
-  analysis: string;
-  questionCount: number;
-};
+type State = typeof GraphState.State;
 
-type SessionRow = {
+export type GraphSession = {
   id: string;
   project_id: string;
-  capture_state: string;
-  analysis_state: string;
   scope_json: string;
   policy_version: string;
+  epoch_id: string;
 };
 
-export async function runSessionGraph(
-  db: Sql,
-  session: SessionRow,
-  mode: DataMode,
-  nowMs: number,
-): Promise<AnalysisRunResult> {
-  const oracle = loadSessionOracle();
-  const checkpointer = new NodeSqliteSaver(db);
-  const threadId = `${session.project_id}/${session.id}/${session.policy_version}`;
-
-  const graph = new StateGraph(GraphState)
-    .addNode("prepare", () => ({ stage: "prepare" }))
-    .addNode("interpret", () => {
-      const evidence = db
-        .prepare("SELECT id, review_state, session_id FROM evidence WHERE session_id = ?")
-        .all(session.id) as Array<{ id: string; review_state: string; session_id: string }>;
-      const ids = evidenceIdsForMode(
-        mode,
-        session.id,
-        evidence.map((item) => ({
-          id: item.id,
-          reviewState: item.review_state,
-          sessionId: item.session_id,
-        })),
-      );
-      if (mode !== "local_only") {
-        db.prepare(
-          `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
-           VALUES (?, ?, ?, 'network', ?)`,
-        ).run(
-          randomUUID(),
-          session.id,
-          new Date().toISOString(),
-          JSON.stringify({ evidenceIds: ids }),
-        );
-      }
-      const known = new Set(evidence.map((item) => item.id));
-      const output = acceptModelOutput(
-        loadModelOutputFixture(),
-        known,
-        oracle.expected.humanTotalMs,
-      );
-      db.prepare(
-        `INSERT INTO analysis_runs (
-          id, session_id, model, provider, prompt_schema, evidence_json, outcome, usage_json, data_mode
-        ) VALUES (?, ?, 'mock', 'fixture', 'model-output', ?, 'accepted', '{}', ?)`,
-      ).run(randomUUID(), session.id, JSON.stringify(output.episodes), mode);
-      return { stage: "interpret" };
-    })
-    .addNode("episode", () => {
-      writeEpisodes(
-        db,
-        session.id,
-        oracle.stretches as Stretch[],
-        new Set(JSON.parse(session.scope_json) as string[]),
-      );
-      return { stage: "episode" };
-    })
-    .addNode("question", () => {
-      const question = oracle.questions[0];
-      if (!question) return { stage: "question" };
-      askProactiveQuestion(db, {
-        sessionId: session.id,
-        episodeId: question.episodeId,
-        questionId: question.id,
-        prompt: question.prompt,
-        evidenceIds: question.evidenceFrameIds.map((id) => `ev-${id}`),
-        nowMs,
-        limitPerDay: 3,
-        cooldownMs: 60_000,
-      });
-      interrupt({ questionId: question.id });
-      return { stage: "question" };
-    })
-    .addNode("consolidate", () => ({ stage: "consolidate" }))
-    .addEdge(START, "prepare")
-    .addEdge("prepare", "interpret")
-    .addEdge("interpret", "episode")
-    .addEdge("episode", "question")
-    .addEdge("question", "consolidate")
-    .addEdge("consolidate", END)
-    .compile({ checkpointer });
-
-  let interrupted = false;
-  try {
-    const result = await graph.invoke(
-      { sessionId: session.id, projectId: session.project_id, mode, stage: "start" },
-      { configurable: { thread_id: threadId } },
-    );
-    interrupted = isInterrupted(result);
-  } catch (error) {
-    if (!isGraphInterrupt(error)) throw error;
-    interrupted = true;
-  }
-  db.prepare("UPDATE sessions SET analysis_state = ? WHERE id = ?").run(
-    interrupted ? "awaiting_answer" : "completed",
-    session.id,
-  );
-  const count = db
-    .prepare("SELECT COUNT(*) AS count FROM questions WHERE session_id = ?")
-    .get(session.id) as { count: number };
-  return {
-    interrupted,
-    analysis: interrupted ? "awaiting_answer" : "completed",
-    questionCount: count.count,
-  };
-}
-
-function writeEpisodes(
-  db: Sql,
-  sessionId: string,
-  stretches: Stretch[],
-  authorized: Set<string>,
-): void {
-  const summary = summarizeAssignedTime(stretches, authorized);
-  const existing = db
-    .prepare("SELECT COUNT(*) AS count FROM episodes WHERE session_id = ?")
-    .get(sessionId) as {
-    count: number;
-  };
-  if (existing.count > 0) return;
-  const types: Record<string, string> = { "episode-A": "order_entry", "episode-B": "interruption" };
-  for (const [episodeId, durationMs] of Object.entries(summary.byEpisodeMs)) {
-    db.prepare(
-      `INSERT INTO episodes (id, session_id, activity_type, case_id, objective, review_state, duration_ms)
-       VALUES (?, ?, ?, NULL, ?, 'proposed', ?)`,
-    ).run(
-      episodeId,
-      sessionId,
-      types[episodeId] ?? "activity",
-      `Attività ${episodeId}`,
-      durationMs,
-    );
-    for (const stretch of stretches) {
-      if (stretch.episodeId !== episodeId || stretch.assignment === "secondary") continue;
-      if (stretch.kind === "declared_wait" || stretch.kind === "unknown") continue;
-      for (const interval of stretch.intervals) {
-        if (!authorized.has(interval.sourceId)) continue;
-        db.prepare(
-          `INSERT INTO episode_intervals (
-            id, episode_id, session_id, source_id, start_ms, end_ms, assignment, origin
-          ) VALUES (?, ?, ?, ?, ?, ?, 'primary', 'oracle')`,
-        ).run(
-          randomUUID(),
-          episodeId,
-          sessionId,
-          interval.sourceId,
-          interval.startMs,
-          interval.endMs,
-        );
-      }
-    }
-  }
-  db.prepare(
-    `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
-     VALUES (?, ?, ?, 'time_summary', ?)`,
-  ).run(randomUUID(), sessionId, new Date().toISOString(), JSON.stringify(summary));
-}
+export type GraphRun = {
+  interrupted: boolean;
+  reason: string | null;
+  model: string | null;
+};
 
 export function threadIdFor(projectId: string, sessionId: string, policyVersion: string): string {
   return `${projectId}/${sessionId}/${policyVersion}`;
+}
+
+function buildSessionGraph(deps: InterpretDeps) {
+  const { db } = deps;
+  const session = (sessionId: string) =>
+    db.prepare("SELECT scope_json, epoch_id FROM sessions WHERE id = ?").get(sessionId) as {
+      scope_json: string;
+      epoch_id: string;
+    };
+
+  return new StateGraph(GraphState)
+    .addNode("prepare", () => ({ stage: "prepare" }))
+    .addNode("interpret", async (state: State) => {
+      const result = await interpretSession(deps, {
+        sessionId: state.sessionId,
+        mode: state.mode,
+        windowMs: sessionDurationMs(db, state.sessionId, session(state.sessionId).epoch_id),
+      });
+      return { stage: "interpret", ...result };
+    })
+    .addNode("episode", (state: State) => {
+      if (!state.output) return { stage: "episode" };
+      const row = session(state.sessionId);
+      const authorizedSourceIds = JSON.parse(row.scope_json) as string[];
+      writeEpisodes(db, {
+        sessionId: state.sessionId,
+        output: state.output,
+        stretches: deps.profile.timeline({
+          output: state.output,
+          frames: loadFrames(db, state.sessionId, row.epoch_id),
+          sessionEndMs: sessionDurationMs(db, state.sessionId, row.epoch_id),
+          authorizedSourceIds,
+        }),
+        authorized: new Set(authorizedSourceIds),
+        origin: adapterFor(deps.profile, state.mode)?.provider ?? "model",
+        wallTime: deps.nowWall(),
+      });
+      return { stage: "episode" };
+    })
+    .addNode("question", (state: State) => {
+      const proposal = state.output?.questions?.[0];
+      if (!proposal) return { stage: "question", questionId: null };
+      const questionId = questionIdFor(state.sessionId, proposal.episodeId, proposal.prompt);
+      // This node runs again on resume: every effect before interrupt() must be idempotent.
+      const existing = findQuestion(db, questionId);
+      if (existing?.status === "answered") return { stage: "question", questionId };
+      if (!existing) {
+        const asked = askProactiveQuestion(db, {
+          sessionId: state.sessionId,
+          episodeId: proposal.episodeId,
+          questionId,
+          prompt: proposal.prompt,
+          evidenceIds: proposal.evidenceIds,
+          nowMs: Date.parse(deps.nowWall()),
+          ...questionLimits(db, state.projectId),
+        });
+        if (!asked.asked) return { stage: "question", questionId: null };
+      }
+      interrupt({ questionId });
+      return { stage: "question", questionId };
+    })
+    .addNode("consolidate", (state: State) => {
+      const question = state.questionId ? findQuestion(db, state.questionId) : undefined;
+      db.prepare(
+        `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
+         VALUES (?, ?, ?, 'analysis_completed', ?)`,
+      ).run(
+        randomUUID(),
+        state.sessionId,
+        deps.nowWall(),
+        JSON.stringify({ questionId: state.questionId, questionStatus: question?.status ?? null }),
+      );
+      return { stage: "consolidate" };
+    })
+    .addEdge(START, "prepare")
+    .addEdge("prepare", "interpret")
+    .addConditionalEdges("interpret", (state: State) => (state.output ? "episode" : END), [
+      "episode",
+      END,
+    ])
+    .addEdge("episode", "question")
+    .addEdge("question", "consolidate")
+    .addEdge("consolidate", END)
+    .compile({ checkpointer: new NodeSqliteSaver(db) });
+}
+
+function threadOf(session: GraphSession): { thread_id: string } {
+  return { thread_id: threadIdFor(session.project_id, session.id, session.policy_version) };
+}
+
+const pendingValueSchema = z.object({ questionId: z.string() });
+
+export type PendingQuestion = { questionId: string; mode: DataMode };
+
+/** The question the thread is waiting on, read from the checkpoint. */
+export async function pendingInterrupt(
+  deps: InterpretDeps,
+  session: GraphSession,
+): Promise<PendingQuestion | null> {
+  const snapshot = await buildSessionGraph(deps).getState({ configurable: threadOf(session) });
+  if (snapshot.next.length === 0) return null;
+  const mode = (snapshot.values as Partial<State>).mode;
+  const value = snapshot.tasks.flatMap((task) => task.interrupts).map((item) => item.value)[0];
+  const parsed = pendingValueSchema.safeParse(value);
+  if (!parsed.success || !mode) return null;
+  return { questionId: parsed.data.questionId, mode };
+}
+
+/** Starts a fresh run on the session thread; every channel is reset by the input. */
+export function runSessionGraph(
+  deps: InterpretDeps,
+  session: GraphSession,
+  mode: DataMode,
+): Promise<GraphRun> {
+  const input: State = {
+    sessionId: session.id,
+    projectId: session.project_id,
+    mode,
+    stage: "start",
+    reason: null,
+    model: null,
+    output: null,
+    questionId: null,
+  };
+  return invokeGraph(deps, session, (graph, config) => graph.invoke(input, config));
+}
+
+/** Continues the waiting thread after an accepted answer. The resume value is always an object. */
+export function resumeSessionGraph(
+  deps: InterpretDeps,
+  session: GraphSession,
+  resume: { questionId: string; outcome: "answered" },
+): Promise<GraphRun> {
+  return invokeGraph(deps, session, (graph, config) =>
+    graph.invoke(new Command({ resume }), config),
+  );
+}
+
+type SessionGraph = ReturnType<typeof buildSessionGraph>;
+type InvokeConfig = { configurable: { thread_id: string }; durability: "sync" };
+
+async function invokeGraph(
+  deps: InterpretDeps,
+  session: GraphSession,
+  invoke: (graph: SessionGraph, config: InvokeConfig) => Promise<unknown>,
+): Promise<GraphRun> {
+  const graph = buildSessionGraph(deps);
+  const configurable = threadOf(session);
+  await invoke(graph, { configurable, durability: "sync" });
+  const snapshot = await graph.getState({ configurable });
+  const values = snapshot.values as Partial<State>;
+  return {
+    interrupted: snapshot.next.length > 0,
+    reason: values.reason ?? null,
+    model: values.model ?? null,
+  };
 }

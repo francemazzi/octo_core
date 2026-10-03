@@ -1,4 +1,5 @@
 import { OctoError } from "../errors.js";
+import type { Sql } from "../storage/db.js";
 
 export type ClockReading = { epochId: string; offsetMs: number; wall: string };
 
@@ -19,4 +20,15 @@ export function assertSingleEpoch(epochIds: string[]): void {
   if (unique.size > 1) {
     throw new OctoError("mixed_epochs", "cannot subtract offsets from different process epochs");
   }
+}
+
+/** Session time in the current clock epoch: last event offset minus first event offset. */
+export function sessionDurationMs(db: Sql, sessionId: string, epochId: string): number {
+  const rows = db
+    .prepare(
+      "SELECT offset_ms FROM capture_events WHERE session_id = ? AND epoch_id = ? ORDER BY sequence",
+    )
+    .all(sessionId, epochId) as Array<{ offset_ms: number }>;
+  if (rows.length < 2) return 0;
+  return durationFromOffsets(rows[0]?.offset_ms ?? 0, rows[rows.length - 1]?.offset_ms ?? 0);
 }

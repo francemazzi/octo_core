@@ -44,4 +44,54 @@ describe("A02 engine process", () => {
     engine.child.kill("SIGKILL");
     expect(await exit).toBe("SIGKILL");
   });
+
+  it("measures session time with the process clock", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "octo-a02-clock-"));
+    const engine = new EngineProcess(dir);
+    const started = await engine.request({
+      cmd: "session.start",
+      projectId: "oracle-project",
+      operatorPseudonym: "op-demo",
+      sourceIds: ["mon-1"],
+      purpose: "clock",
+    });
+    expect(started.ok).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect((await engine.request({ cmd: "session.stop" })).ok).toBe(true);
+    const state = await engine.request({ cmd: "session.state" });
+    expect((state.result as { durationMs: number }).durationMs).toBeGreaterThanOrEqual(30);
+    await engine.close();
+  });
+
+  it("answers a model question over the protocol and resumes the analysis", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "octo-a02-question-"));
+    const engine = new EngineProcess(dir, { OCTO_MODEL: "fixture" });
+    await engine.request({
+      cmd: "session.start",
+      projectId: "oracle-project",
+      operatorPseudonym: "op-demo",
+      sourceIds: ["mon-1", "mon-2"],
+      purpose: "domande",
+    });
+    await engine.request({ cmd: "capture.replay" });
+    const run = await engine.request({ cmd: "analysis.run", mode: "local_only" });
+    expect(run.result).toMatchObject({ analysis: "awaiting_answer", reason: "accepted" });
+
+    const listed = await engine.request({ cmd: "question.list" });
+    const questions = (
+      listed.result as { questions: Array<{ questionId: string; episodeId: string }> }
+    ).questions;
+    expect(questions).toHaveLength(1);
+    const answer = await engine.request({
+      cmd: "question.answer",
+      questionId: questions[0]?.questionId,
+      episodeId: questions[0]?.episodeId,
+      text: "sì",
+    });
+    expect(answer.result).toEqual({ status: "accepted", analysis: "completed" });
+
+    const removed = await engine.request({ cmd: "analysis.local" });
+    expect(removed.error?.code).toBe("invalid_payload");
+    await engine.close();
+  });
 });

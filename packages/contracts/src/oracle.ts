@@ -180,24 +180,18 @@ export const engineCommandSchema = z.discriminatedUnion("cmd", [
   }),
   z.object({ v: z.number(), id: z.string(), cmd: z.literal("diagnostics.log") }),
   z.object({ v: z.number(), id: z.string(), cmd: z.literal("model.status") }),
-  z.object({ v: z.number(), id: z.string(), cmd: z.literal("analysis.local") }),
   z.object({ v: z.number(), id: z.string(), cmd: z.literal("report.tick") }),
+  z.object({ v: z.number(), id: z.string(), cmd: z.literal("question.list") }),
+  z.object({
+    v: z.number(),
+    id: z.string(),
+    cmd: z.literal("capture.image"),
+    frameId: z.string().min(1).max(200),
+    sourceId: z.string().min(1).max(100),
+    offsetMs: z.number().int().nonnegative(),
+    imageBase64: z.string().min(1).max(16_000_000),
+  }),
   z.object({ v: z.number(), id: z.string(), cmd: z.literal("session.delete") }),
 ]);
 
 export type EngineCommand = z.infer<typeof engineCommandSchema>;
-
-export const modelOutputSchema = z
-  .object({
-    episodes: z.array(
-      z.object({
-        episodeId: z.string(),
-        activityType: z.string(),
-        evidenceIds: z.array(z.string()),
-        durationMs: z.number().int().nonnegative(),
-      }),
-    ),
-  })
-  .strict();
-
-export type ModelOutput = z.infer<typeof modelOutputSchema>;

@@ -27,15 +27,30 @@ export function acceptModelOutput(
   if (!parsed.success) {
     throw new OctoError("invalid_model_output", parsed.error.message);
   }
+  if (parsed.data.episodes.length === 0) {
+    throw new OctoError("empty_output", "the model proposed no episode");
+  }
+  const assigned = new Set<string>();
   for (const episode of parsed.data.episodes) {
     for (const evidenceId of episode.evidenceIds) {
-      if (!knownEvidence.has(evidenceId)) {
-        throw new OctoError("unknown_evidence", evidenceId);
-      }
+      assertKnown(knownEvidence, evidenceId);
+      if (assigned.has(evidenceId)) throw new OctoError("duplicate_evidence", evidenceId);
+      assigned.add(evidenceId);
     }
-    if (episode.durationMs > sessionDurationMs) {
+    if ((episode.durationMs ?? 0) > sessionDurationMs) {
       throw new OctoError("invented_duration", `${episode.episodeId} exceeds the session`);
     }
   }
+  const episodeIds = new Set(parsed.data.episodes.map((episode) => episode.episodeId));
+  for (const question of parsed.data.questions ?? []) {
+    if (!episodeIds.has(question.episodeId)) {
+      throw new OctoError("unknown_episode", question.episodeId);
+    }
+    for (const evidenceId of question.evidenceIds) assertKnown(knownEvidence, evidenceId);
+  }
   return parsed.data;
+}
+
+function assertKnown(knownEvidence: ReadonlySet<string>, evidenceId: string): void {
+  if (!knownEvidence.has(evidenceId)) throw new OctoError("unknown_evidence", evidenceId);
 }

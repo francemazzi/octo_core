@@ -5,7 +5,7 @@ export default defineConfig({
     environment: "node",
     env: { NODE_NO_WARNINGS: "1" },
     fileParallelism: false,
-    include: ["tests/integration/**/*.live.test.ts"],
+    include: ["tests/integration/ollama.live.test.ts", "tests/integration/ocr.live.test.ts"],
     testTimeout: 180_000,
   },
 });

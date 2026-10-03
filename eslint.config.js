@@ -10,6 +10,8 @@ export default tseslint.config(
       "apps/desktop/dist/**",
       "apps/desktop/.vite/**",
       "coverage/**",
+      "release/**",
+      "dist-win/**",
     ],
   },
   ...tseslint.configs.recommended,

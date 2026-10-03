@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { QuestionsPanel, type UiQuestion } from "./QuestionsPanel.js";
 
 type Capture = "idle" | "recording" | "paused" | "stopped";
 
@@ -6,11 +7,13 @@ type UiState = {
   capture: Capture;
   note: string;
   sources: Array<{ id: string; label: string; selected: boolean }>;
+  questions: UiQuestion[];
 };
 
 const initial: UiState = {
   capture: "idle",
   note: "",
+  questions: [],
   sources: [
     { id: "mon-1", label: "Schermo 1", selected: false },
     { id: "mon-2", label: "Schermo 2", selected: false },
@@ -74,6 +77,9 @@ export function App() {
         </>
       ) : null}
       {view !== "mascot" && state.note ? <p>{state.note}</p> : null}
+      {view !== "mascot" && state.questions.length > 0 ? (
+        <QuestionsPanel questions={state.questions} />
+      ) : null}
     </main>
   );
 }

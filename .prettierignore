@@ -1,5 +1,7 @@
 node_modules
 dist
+dist-win
+release
 pnpm-lock.yaml
 logo_octo.png
 roadmap.md

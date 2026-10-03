@@ -9,17 +9,18 @@ import {
 } from "@octo/capture-adapter";
 import { loadSessionOracle } from "@octo/test-fixtures";
 import type { EconomicsInput } from "@octo/contracts";
+import { createImageQueue, type ImageFrame } from "./capture/image-queue.js";
 import { ingestFrame, nextSequence } from "./capture/ingest.js";
+import type { OcrReader } from "./capture/ocr.js";
 import { InMemoryKeyProvider, type KeyProvider } from "./crypto/key-provider.js";
 import { computeEconomics } from "./domain/economics.js";
-import { assertSingleEpoch, durationFromOffsets } from "./sessions/clock.js";
+import { assertSingleEpoch, durationFromOffsets, sessionDurationMs } from "./sessions/clock.js";
 import { assertCaptureTransition, type CaptureState } from "./sessions/machine.js";
 import { OctoError } from "./errors.js";
-import { runSessionGraph } from "./analysis/graph.js";
-import { analyzeLocalSession } from "./analysis/local-analysis.js";
-import { probeOllama } from "./analysis/ollama.js";
+import { fixtureProfile } from "./analysis/fixture-adapter.js";
+import type { AnalysisProfile } from "./analysis/model-adapter.js";
+import { createAnalysisService } from "./analysis/service.js";
 import { tickMiniReport } from "./reports/cadence.js";
-import { answerQuestion, deferQuestion } from "./analysis/questions.js";
 import { JobRunner, type JobRow } from "./jobs/runner.js";
 import { applyRetention, evaluateQuota } from "./jobs/quota.js";
 import { readDiagnostic, writeDiagnostic } from "./diagnostics/log.js";
@@ -34,6 +35,8 @@ export type EngineOptions = {
   nowWall?: () => string;
   offline?: boolean;
   quotaThresholdBytes?: number;
+  analysis?: AnalysisProfile;
+  ocr?: OcrReader;
 };
 
 type SessionRow = {
@@ -63,6 +66,48 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
   const nowMono = options.nowMono ?? (() => mono);
   const nowWall = options.nowWall ?? (() => wall);
   const quotaThreshold = options.quotaThresholdBytes ?? 1_000_000;
+  const images = createImageQueue({
+    ocr: options.ocr,
+    accept: (sourceId) => {
+      const session = active();
+      if (session?.capture_state !== "recording") return { rejected: "not_recording" };
+      const authorized = adapter.authorizedSourceIds(
+        new Set(JSON.parse(session.scope_json) as string[]),
+      );
+      if (!authorized.has(sourceId)) return { rejected: "unauthorized" };
+      return (frame) =>
+        ingestFrame(db, media, {
+          sessionId: session.id,
+          captureState: "recording",
+          authorized,
+          ...frame,
+          epochId: session.epoch_id,
+          wall: nowWall(),
+        });
+    },
+    onFailure: (frameId, error) => {
+      db.prepare(
+        `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
+         VALUES (?, ?, ?, 'ocr_failed', ?)`,
+      ).run(
+        randomUUID(),
+        active()?.id ?? null,
+        nowWall(),
+        JSON.stringify({
+          frameId,
+          error: error instanceof OctoError ? error.code : "internal",
+          message: error instanceof Error ? error.message.slice(0, 200) : "",
+        }),
+      );
+    },
+  });
+  const analysis = createAnalysisService({
+    db,
+    profile: options.analysis ?? fixtureProfile(),
+    readText: (assetId) => media.readPlaintext(assetId).toString("utf8"),
+    nowWall,
+    requireSession: () => requireSession(),
+  });
 
   function active(): SessionRow | undefined {
     return db
@@ -208,6 +253,13 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
       ).run(randomUUID(), sessionId, nowWall(), epochId, nextSequence(db, sessionId));
       return epochId;
     },
+    reopenActiveEpochs(): number {
+      const rows = db
+        .prepare("SELECT id FROM sessions WHERE capture_state IN ('recording', 'paused')")
+        .all() as Array<{ id: string }>;
+      for (const row of rows) this.openEpoch(row.id);
+      return rows.length;
+    },
     mixedDuration(): number {
       const session = requireSession();
       const rows = db
@@ -221,16 +273,7 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
     },
     durationMs(): number {
       const session = requireSession();
-      const rows = db
-        .prepare(
-          "SELECT offset_ms, epoch_id FROM capture_events WHERE session_id = ? ORDER BY sequence",
-        )
-        .all(session.id) as Array<{ offset_ms: number; epoch_id: string }>;
-      const same = rows.filter((row) => row.epoch_id === session.epoch_id);
-      if (same.length < 2) return 0;
-      const start = same[0]?.offset_ms ?? 0;
-      const end = same[same.length - 1]?.offset_ms ?? 0;
-      return durationFromOffsets(start, end);
+      return sessionDurationMs(db, session.id, session.epoch_id);
     },
     replayCapture() {
       const session = requireSession();
@@ -290,37 +333,30 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
         wall: nowWall(),
       });
     },
-    async modelStatus() {
-      if (process.env.OCTO_MODEL === "off") return { up: false, model: null };
-      return probeOllama();
+    captureImage(frame: ImageFrame) {
+      return images.enqueue(frame);
     },
-    analyzeLocal() {
-      const session = requireSession();
-      return analyzeLocalSession({
-        db,
-        sessionId: session.id,
-        sessionDurationMs: this.durationMs(),
-        readText: (assetId) => media.readPlaintext(assetId).toString("utf8"),
-      });
+    drainCapture(): Promise<void> {
+      return images.drain();
+    },
+    modelStatus() {
+      return analysis.modelStatus();
     },
     reportTick(nowMs = Date.now()) {
       return tickMiniReport({ db, dataDir, nowMs });
     },
     async runAnalysis(mode: "local_only" | "cloud_after_review" | "cloud_live_authorized") {
-      const session = requireSession();
-      db.prepare("UPDATE sessions SET analysis_state = 'running', data_mode = ? WHERE id = ?").run(
-        mode,
-        session.id,
-      );
-      const refreshed = requireSession();
-      const result = await runSessionGraph(db, refreshed, mode, nowMono());
-      return { ...result, capture: requireSession().capture_state };
+      await images.drain();
+      return analysis.run(mode);
     },
     answerQuestion(input: { questionId: string; episodeId: string; text: string }) {
-      return answerQuestion(db, { ...input, nowIso: nowWall() });
+      return analysis.answer(input);
     },
     deferQuestion(questionId: string) {
-      deferQuestion(db, questionId);
+      analysis.defer(questionId);
+    },
+    openQuestions() {
+      return analysis.list();
     },
     confirmEpisode(episodeId: string) {
       confirmEpisode(db, episodeId);

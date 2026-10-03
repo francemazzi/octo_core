@@ -29,8 +29,17 @@ export function ingestFrame(
   const duplicate = db
     .prepare("SELECT id FROM assets WHERE session_id = ? AND hash = ? AND state = 'valid'")
     .get(input.sessionId, hash) as { id: string } | undefined;
-  if (duplicate) return { stored: false, reason: "duplicate" };
+  if (duplicate) {
+    // The screenshot is dropped, the time it stands for is not: record a repeat of the evidence.
+    const original = db.prepare("SELECT id FROM evidence WHERE asset_id = ?").get(duplicate.id) as
+      { id: string } | undefined;
+    if (original) {
+      insertEvent(db, input, "frame_repeat", { evidenceId: original.id, sourceId: input.sourceId });
+    }
+    return { stored: false, reason: "duplicate" };
+  }
 
+  const evidenceId = `ev-${input.frameId}`;
   const begun = media.begin(input.sessionId, Buffer.from(minimized));
   media.commit(begun.assetId);
   db.prepare(
@@ -38,7 +47,7 @@ export function ingestFrame(
       id, session_id, source_id, start_ms, end_ms, asset_id, content_hash, masks_json, availability, review_state
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'valid', 'pending')`,
   ).run(
-    `ev-${input.frameId}`,
+    evidenceId,
     input.sessionId,
     input.sourceId,
     input.offsetMs,
@@ -47,9 +56,19 @@ export function ingestFrame(
     hash,
     JSON.stringify(masked.masks),
   );
+  insertEvent(db, input, "frame", { frameId: input.frameId, evidenceId });
+  return { stored: true, reason: "stored" };
+}
+
+function insertEvent(
+  db: Sql,
+  input: { sessionId: string; wall: string; offsetMs: number; epochId: string },
+  kind: "frame" | "frame_repeat",
+  detail: Record<string, string>,
+): void {
   db.prepare(
     `INSERT INTO capture_events (id, session_id, wall_time, offset_ms, epoch_id, sequence, kind, detail_json)
-     VALUES (?, ?, ?, ?, ?, ?, 'frame', ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     randomUUID(),
     input.sessionId,
@@ -57,9 +76,9 @@ export function ingestFrame(
     input.offsetMs,
     input.epochId,
     nextSequence(db, input.sessionId),
-    JSON.stringify({ frameId: input.frameId }),
+    kind,
+    JSON.stringify(detail),
   );
-  return { stored: true, reason: "stored" };
 }
 
 export function nextSequence(db: Sql, sessionId: string): number {

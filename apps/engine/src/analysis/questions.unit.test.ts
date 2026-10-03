@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { openDatabase } from "../storage/db.js";
-import { answerQuestion, askProactiveQuestion } from "./questions.js";
+import {
+  answerQuestion,
+  askProactiveQuestion,
+  deferQuestion,
+  listOpenQuestions,
+  questionIdFor,
+} from "./questions.js";
 
 function db() {
   const dir = mkdtempSync(join(tmpdir(), "octo-q-"));
@@ -59,5 +65,28 @@ describe("question quota", () => {
       nowIso: "2026-01-15T01:00:00.000Z",
     });
     expect(quarantined.status).toBe("quarantined");
+
+    deferQuestion(database, "q2");
+    expect(listOpenQuestions(database).map((row) => [row.questionId, row.status])).toEqual([
+      ["q3", "open"],
+      ["q2", "deferred"],
+      ["q1", "open"],
+    ]);
+    const later = answerQuestion(database, {
+      questionId: "q2",
+      episodeId: "episode-A",
+      text: "sì",
+      nowIso: "2026-01-15T02:00:00.000Z",
+    });
+    expect(later.status).toBe("accepted");
+    deferQuestion(database, "q2");
+    expect(listOpenQuestions(database).some((row) => row.questionId === "q2")).toBe(false);
+  });
+
+  it("derives question ids from session, episode, and prompt", () => {
+    const id = questionIdFor("s1", "episode-A", "Stesso ordine?");
+    expect(id).toMatch(/^q-[a-f0-9]{16}$/);
+    expect(questionIdFor("s1", "episode-A", "Stesso ordine?")).toBe(id);
+    expect(questionIdFor("s2", "episode-A", "Stesso ordine?")).not.toBe(id);
   });
 });

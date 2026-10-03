@@ -2,6 +2,7 @@ import { createInterface } from "node:readline";
 import { engineCommandSchema, PROTOCOL_VERSION, type EngineCommand } from "@octo/contracts";
 import { createEngine, type Engine } from "../create-engine.js";
 import { OctoError } from "../errors.js";
+import { runtimeOptions } from "./runtime.js";
 
 export async function dispatch(engine: Engine, command: EngineCommand): Promise<unknown> {
   switch (command.cmd) {
@@ -12,12 +13,14 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
     case "session.start":
       return engine.startSession(command);
     case "session.pause":
+      await engine.drainCapture();
       engine.pauseSession();
       return { capture: "paused" };
     case "session.resume":
       engine.resumeSession();
       return { capture: "recording" };
     case "session.stop":
+      await engine.drainCapture();
       engine.stopSession();
       return { capture: "stopped" };
     case "session.state":
@@ -26,16 +29,18 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
       return engine.replayCapture();
     case "capture.frame":
       return engine.ingestFrame(command);
+    case "capture.image":
+      return engine.captureImage(command);
     case "analysis.run":
       return engine.runAnalysis(command.mode);
     case "model.status":
       return engine.modelStatus();
-    case "analysis.local":
-      return engine.analyzeLocal();
     case "report.tick":
       return engine.reportTick();
     case "question.answer":
       return engine.answerQuestion(command);
+    case "question.list":
+      return { questions: engine.openQuestions() };
     case "question.defer":
       engine.deferQuestion(command.questionId);
       return { status: "deferred" };
@@ -61,7 +66,7 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
   }
 }
 
-export async function serve(engine: Engine = createEngine(requiredDataDir())): Promise<void> {
+export async function serve(engine: Engine = startEngine()): Promise<void> {
   const lines = createInterface({ input: process.stdin });
   const write = (message: unknown) => {
     process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -115,6 +120,12 @@ export async function serve(engine: Engine = createEngine(requiredDataDir())): P
       write({ v: 1, id, ok: false, error: { code, message } });
     }
   }
+}
+
+function startEngine(): Engine {
+  const engine = createEngine(requiredDataDir(), runtimeOptions());
+  engine.reopenActiveEpochs();
+  return engine;
 }
 
 function requiredDataDir(): string {

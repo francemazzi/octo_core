@@ -3,8 +3,10 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { createEngine } from "@octo/engine";
 import { _electron as electron } from "playwright";
 import { describe, expect, it } from "vitest";
+import { startDemo } from "../helpers/engine.js";
 
 function electronBinary(): string {
   return execFileSync("node", ["-e", "process.stdout.write(require('electron'))"], {
@@ -52,5 +54,44 @@ describe("A10 desktop shell", () => {
     expect(session.capture_state).toBe("stopped");
     expect(evidence.some((item) => item.start_ms >= 999_999)).toBe(false);
     expect(evidence).toHaveLength(1);
+  }, 180_000);
+
+  it("answers a waiting question from the dashboard and completes the analysis", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "octo-a10-question-"));
+    const seeded = createEngine(dataDir);
+    startDemo(seeded);
+    seeded.replayCapture();
+    seeded.setMono(10_000 + 2_460_000);
+    seeded.stopSession();
+    expect((await seeded.runAnalysis("local_only")).analysis).toBe("awaiting_answer");
+    seeded.close();
+
+    const app = await electron.launch({
+      executablePath: electronBinary(),
+      args: [join(process.cwd(), "apps/desktop")],
+      env: {
+        ...process.env,
+        OCTO_DATA_DIR: dataDir,
+        OCTO_CAPTURE: "synthetic",
+        OCTO_MODEL: "off",
+        OCTO_REPO_ROOT: process.cwd(),
+      },
+    });
+    const page = await app.firstWindow();
+    const prompt = "Questi passaggi appartengono allo stesso ordine?";
+    await page.getByRole("textbox", { name: `Risposta: ${prompt}` }).fill("Sì, stesso ordine");
+    await page.getByRole("button", { name: "Rispondi" }).click();
+    await page.getByText("Grazie, analisi completata.").waitFor();
+    await expect.poll(() => page.getByText(prompt).count()).toBe(0);
+    await app.close();
+
+    const db = new DatabaseSync(join(dataDir, "octo.db"));
+    const session = db.prepare("SELECT analysis_state FROM sessions").get() as {
+      analysis_state: string;
+    };
+    const answers = db.prepare("SELECT text, status FROM answers").all();
+    db.close();
+    expect(session.analysis_state).toBe("completed");
+    expect(answers).toEqual([{ text: "Sì, stesso ordine", status: "accepted" }]);
   }, 180_000);
 });

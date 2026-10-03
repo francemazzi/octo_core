@@ -48,3 +48,41 @@ label {
   gap: 8px;
   align-items: center;
 }
+
+.questions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.questions h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.question {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--highlight);
+}
+
+.question p {
+  margin: 0;
+}
+
+.question textarea {
+  font: inherit;
+  padding: 8px;
+  border: 1px solid var(--sky-1);
+  border-radius: 8px;
+  resize: vertical;
+}
+
+.question .actions {
+  display: flex;
+  gap: 8px;
+}

@@ -1,8 +1,27 @@
 import { randomUUID } from "node:crypto";
+import { sha256 } from "../crypto/aes.js";
 import { OctoError } from "../errors.js";
 import type { Sql } from "../storage/db.js";
 
 const DAY_MS = 86_400_000;
+
+/** Question ids are scoped to the session, so two sessions never share a question row. */
+export function questionIdFor(sessionId: string, episodeId: string, prompt: string): string {
+  return `q-${sha256(`${sessionId}|${episodeId}|${prompt}`).slice(0, 16)}`;
+}
+
+export function questionLimits(
+  db: Sql,
+  projectId: string,
+): { limitPerDay: number; cooldownMs: number } {
+  const row = db
+    .prepare("SELECT question_limit_per_day, question_cooldown_ms FROM projects WHERE id = ?")
+    .get(projectId) as { question_limit_per_day: number; question_cooldown_ms: number } | undefined;
+  return {
+    limitPerDay: row?.question_limit_per_day ?? 3,
+    cooldownMs: row?.question_cooldown_ms ?? 60_000,
+  };
+}
 
 export function askProactiveQuestion(
   db: Sql,
@@ -61,8 +80,8 @@ export function answerQuestion(
   const question = db
     .prepare("SELECT id, episode_id, status FROM questions WHERE id = ?")
     .get(input.questionId) as { id: string; episode_id: string; status: string } | undefined;
-  const mismatch =
-    !question || question.episode_id !== input.episodeId || question.status !== "open";
+  const answerable = question?.status === "open" || question?.status === "deferred";
+  const mismatch = !question || question.episode_id !== input.episodeId || !answerable;
   const status = mismatch ? "quarantined" : "accepted";
   db.prepare(
     `INSERT INTO answers (id, question_id, episode_id, text, status, created_at)
@@ -74,9 +93,41 @@ export function answerQuestion(
   return { status };
 }
 
+/** Deferring postpones an open question: it stays answerable and the graph keeps waiting. */
 export function deferQuestion(db: Sql, questionId: string): void {
   const row = db.prepare("SELECT id FROM questions WHERE id = ?").get(questionId) as
     { id: string } | undefined;
   if (!row) throw new OctoError("missing_question", questionId);
-  db.prepare("UPDATE questions SET status = 'deferred' WHERE id = ?").run(questionId);
+  db.prepare("UPDATE questions SET status = 'deferred' WHERE id = ? AND status = 'open'").run(
+    questionId,
+  );
+}
+
+export type QuestionRow = {
+  questionId: string;
+  sessionId: string;
+  episodeId: string;
+  prompt: string;
+  status: string;
+  askedAtMs: number;
+};
+
+export function findQuestion(db: Sql, questionId: string): QuestionRow | undefined {
+  return db
+    .prepare(
+      `SELECT id AS questionId, session_id AS sessionId, episode_id AS episodeId, prompt, status,
+       asked_at_ms AS askedAtMs FROM questions WHERE id = ?`,
+    )
+    .get(questionId) as QuestionRow | undefined;
+}
+
+/** Questions still waiting for the operator, newest first, across sessions. */
+export function listOpenQuestions(db: Sql, limit = 20): QuestionRow[] {
+  return db
+    .prepare(
+      `SELECT id AS questionId, session_id AS sessionId, episode_id AS episodeId, prompt, status,
+       asked_at_ms AS askedAtMs FROM questions WHERE status IN ('open', 'deferred')
+       ORDER BY asked_at_ms DESC LIMIT ?`,
+    )
+    .all(limit) as QuestionRow[];
 }

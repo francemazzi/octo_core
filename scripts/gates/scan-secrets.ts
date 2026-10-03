@@ -23,6 +23,8 @@ export function findSecrets(root: string): SecretHit[] {
 function walk(root: string, dir: string, hits: SecretHit[]): void {
   for (const entry of readdirSync(dir)) {
     if (SKIP_DIRS.has(entry)) continue;
+    // Local env files hold the developer's own keys and are gitignored; they never ship.
+    if (entry === ".env" || entry.startsWith(".env.")) continue;
     const full = join(dir, entry);
     const stat = statSync(full);
     if (stat.isDirectory()) {

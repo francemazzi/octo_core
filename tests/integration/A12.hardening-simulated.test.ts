@@ -75,6 +75,17 @@ describe("A12 simulated hardening", () => {
     expect(sessions).toHaveLength(1);
     recovered.close();
 
+    const restarted = new EngineProcess(liveDir);
+    const stopped = await restarted.request({ cmd: "session.stop" });
+    expect(stopped.ok).toBe(true);
+    const state = await restarted.request({ cmd: "session.state" });
+    expect(state.ok).toBe(true);
+    await restarted.request({ cmd: "shutdown" });
+    const reopened = createEngine(liveDir);
+    expect(reopened.db.prepare("SELECT id FROM clock_epochs").all()).toHaveLength(2);
+    reopened.close();
+    await restarted.close();
+
     execFileSync("pnpm", ["exec", "tsx", "scripts/package-win.ts"], { cwd: process.cwd() });
     const hash = readFileSync(join(process.cwd(), "dist-win", "build-hash.txt"), "utf8").trim();
     expect(hash).toMatch(/^[a-f0-9]{64}$/);

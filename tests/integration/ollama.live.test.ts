@@ -1,6 +1,9 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createEngine, ollamaProfile } from "@octo/engine";
 import { describe, expect, it } from "vitest";
-import { startDemo, tempEngine } from "../helpers/engine.js";
+import { startDemo } from "../helpers/engine.js";
 
 describe("live Ollama", () => {
   it("extracts episodes from the local model and writes the mini report when it is due", async () => {
@@ -8,7 +11,8 @@ describe("live Ollama", () => {
     const previousName = process.env.OCTO_OLLAMA_MODEL;
     delete process.env.OCTO_MODEL;
     process.env.OCTO_OLLAMA_MODEL = "qwen2.5:7b-instruct-q4_K_M";
-    const { dir, engine } = tempEngine();
+    const dir = mkdtempSync(join(tmpdir(), "octo-live-"));
+    const engine = createEngine(dir, { analysis: ollamaProfile() });
     try {
       startDemo(engine);
       engine.ingestFrame({
@@ -23,12 +27,14 @@ describe("live Ollama", () => {
         offsetMs: 60_000,
         payload: "risposta email al fornitore",
       });
+      engine.setMono(10_000 + 120_000);
+      engine.stopSession();
 
       const status = await engine.modelStatus();
       expect(status).toEqual({ up: true, model: "qwen2.5:7b-instruct-q4_K_M" });
 
-      const analysis = await engine.analyzeLocal();
-      expect(analysis.reason).toBe("analyzed");
+      const analysis = await engine.runAnalysis("local_only");
+      expect(analysis.reason).toBe("accepted");
       expect(analysis.episodes).toBeGreaterThan(0);
 
       const sessionDuration = engine.durationMs();
@@ -53,8 +59,10 @@ describe("live Ollama", () => {
         expect(starts.has(interval.start_ms)).toBe(true);
       }
 
-      const again = await engine.analyzeLocal();
+      const again = await engine.runAnalysis("local_only");
       expect(again.reason).toBe("already_analyzed");
+      const runs = engine.db.prepare("SELECT provider, outcome FROM analysis_runs").all();
+      expect(runs).toEqual([{ provider: "ollama", outcome: "accepted" }]);
 
       engine.db
         .prepare("UPDATE sessions SET started_wall = ?")

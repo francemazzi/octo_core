@@ -4,17 +4,18 @@ export {
   economicsInputSchema,
   economicsOracleSchema,
   engineCommandSchema,
-  modelOutputSchema,
   sessionOracleSchema,
   stretchSchema,
   timeIntervalSchema,
 } from "./oracle.js";
 
+export { MAX_QUESTION_PROMPT_CHARS, modelOutputSchema } from "./model.js";
+export type { ModelOutput } from "./model.js";
+
 export type {
   EconomicsInput,
   EconomicsOracle,
   EngineCommand,
-  ModelOutput,
   OracleStretch,
   SessionOracle,
 } from "./oracle.js";

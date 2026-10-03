@@ -172,19 +172,25 @@ export class NodeSqliteSaver extends BaseCheckpointSaver {
           thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
     const stmt = this.db.prepare(sql);
+    // Serialize first: LangGraph does not await putWrites, so no await may sit inside BEGIN/COMMIT.
+    const rows = await Promise.all(
+      writes.map(async ([channel, value], index) => {
+        const [type, serialized] = await this.serde.dumpsTyped(value);
+        return { channel, type, serialized, idx: WRITES_IDX_MAP[channel] ?? index };
+      }),
+    );
     this.db.exec("BEGIN");
     try {
-      for (const [index, write] of writes.entries()) {
-        const [type, serialized] = await this.serde.dumpsTyped(write[1]);
+      for (const row of rows) {
         stmt.run(
           threadId,
           checkpointNs,
           checkpointId,
           taskId,
-          WRITES_IDX_MAP[write[0]] ?? index,
-          write[0],
-          type,
-          serialized,
+          row.idx,
+          row.channel,
+          row.type,
+          row.serialized,
         );
       }
       this.db.exec("COMMIT");

@@ -1,8 +1,14 @@
-import { randomUUID } from "node:crypto";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { createInterface } from "node:readline";
 import { app, BrowserWindow, ipcMain, nativeImage, type NativeImage } from "electron";
 import { join } from "node:path";
+import { createEngineClient } from "./engine-client.js";
+import { createScreenCapture, screenPermission } from "./screen-capture.js";
+import {
+  answerNote,
+  fetchQuestions,
+  parseAnswer,
+  parseQuestionId,
+  type UiQuestion,
+} from "./questions.js";
 
 declare const __dirname: string;
 
@@ -14,13 +20,22 @@ type UiState = {
   capture: Capture;
   note: string;
   sources: Array<{ id: string; label: string; selected: boolean }>;
+  questions: UiQuestion[];
 };
 
-const ALLOWED = new Set(["octo:getState", "octo:start", "octo:pause", "octo:stop"]);
+const ALLOWED = new Set([
+  "octo:getState",
+  "octo:start",
+  "octo:pause",
+  "octo:stop",
+  "octo:answer",
+  "octo:defer",
+]);
 
 const state: UiState = {
   capture: "idle",
   note: "",
+  questions: [],
   sources: [
     { id: "mon-1", label: "Schermo 1", selected: false },
     { id: "mon-2", label: "Schermo 2", selected: false },
@@ -29,64 +44,30 @@ const state: UiState = {
 
 const dataDir = process.env.OCTO_DATA_DIR ?? join(app.getPath("userData"), "octo");
 
-function startEngine(): ChildProcessWithoutNullStreams {
-  const env = {
-    ...process.env,
-    OCTO_DATA_DIR: dataDir,
-    OCTO_CAPTURE: process.env.OCTO_CAPTURE ?? "synthetic",
-  };
-  if (app.isPackaged) {
-    return spawn(process.execPath, [join(process.resourcesPath, "engine.mjs")], {
-      env: { ...env, ELECTRON_RUN_AS_NODE: "1" },
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-  }
-  const repoRoot = process.env.OCTO_REPO_ROOT ?? join(here, "..", "..", "..");
-  const engineEntry = process.env.OCTO_ENGINE_ENTRY ?? join(repoRoot, "apps/engine/src/main.ts");
-  return spawn("pnpm", ["exec", "tsx", engineEntry], {
-    cwd: repoRoot,
-    env,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-}
+const { child, request } = createEngineClient(dataDir, here);
 
-const child = startEngine();
+/** `screen` captures the real displays; `synthetic` (tests) sends one fixed frame. */
+const captureMode = process.env.OCTO_CAPTURE ?? "screen";
+const capture = createScreenCapture(
+  request,
+  Number(process.env.OCTO_CAPTURE_INTERVAL_MS ?? 30_000),
+  (message) => {
+    state.note = screenPermission() === "granted" ? message : PERMISSION_NOTE;
+    publish();
+  },
+);
 
-const pending = new Map<
-  string,
-  (reply: { ok: boolean; result?: unknown; error?: { message: string } }) => void
->();
-createInterface({ input: child.stdout }).on("line", (line) => {
-  const reply = JSON.parse(line) as {
-    id: string;
-    ok: boolean;
-    result?: unknown;
-    error?: { message: string };
-  };
-  pending.get(reply.id)?.(reply);
-  pending.delete(reply.id);
-});
-
-function request(
-  command: Record<string, unknown>,
-  timeoutMs = 10_000,
-): Promise<{ ok: boolean; result?: unknown }> {
-  const id = randomUUID();
-  child.stdin.write(`${JSON.stringify({ v: 1, id, ...command })}\n`);
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("engine timeout")), timeoutMs);
-    pending.set(id, (reply) => {
-      clearTimeout(timer);
-      if (!reply.ok) reject(new Error(reply.error?.message ?? "engine error"));
-      else resolve(reply);
-    });
-  });
-}
+const PERMISSION_NOTE =
+  "Octo non vede lo schermo: concedi il permesso Registrazione schermo in Impostazioni di Sistema > Privacy e sicurezza, poi riavvia Octo.";
 
 function publish(): void {
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send("octo:state", state);
   }
+}
+
+async function refreshQuestions(): Promise<void> {
+  state.questions = await fetchQuestions(request);
 }
 
 let mascot: BrowserWindow | undefined;
@@ -102,7 +83,7 @@ function logoImage(): NativeImage {
 function createWindow(view: "dashboard" | "mascot"): BrowserWindow {
   const window = new BrowserWindow({
     width: view === "mascot" ? 220 : 420,
-    height: view === "mascot" ? 260 : 520,
+    height: view === "mascot" ? 260 : 680,
     title: "Octo",
     icon: logoImage(),
     alwaysOnTop: view === "mascot",
@@ -124,13 +105,16 @@ function createWindow(view: "dashboard" | "mascot"): BrowserWindow {
       },
     });
   });
+  // Octo's own windows stay out of the screenshots it takes.
+  window.setContentProtection(true);
   void window.loadFile(join(here, "renderer", "index.html"), { query: { view } });
   return window;
 }
 
 async function stopIfNeeded(): Promise<void> {
   if (state.capture === "recording" || state.capture === "paused") {
-    await request({ cmd: "session.stop" });
+    await capture.stop();
+    await request({ cmd: "session.stop" }, 150_000);
     state.capture = "stopped";
   }
 }
@@ -148,27 +132,38 @@ async function finishSessionOnce(): Promise<void> {
   await stopIfNeeded();
   if (state.capture !== "stopped" || process.env.OCTO_MODEL === "off") return;
   try {
-    const analysis = await request({ cmd: "analysis.local" }, 120_000);
+    const analysis = await request({ cmd: "analysis.run", mode: "local_only" }, 150_000);
     const report = await request({ cmd: "report.tick" }, 30_000);
     state.note = statusNote(analysis.result, report.result);
+    await refreshQuestions();
   } catch {
     state.note = "Analisi non riuscita.";
   }
 }
 
 function statusNote(analysis: unknown, report: unknown): string {
-  const extracted = analysis as { episodes?: number; reason?: string; model?: string | null };
+  const extracted = analysis as {
+    analysis?: string;
+    episodes?: number;
+    reason?: string | null;
+    model?: string | null;
+  };
   const written = report as { issued?: boolean; path?: string | null };
-  const model = extracted.model ? `Ollama acceso (${extracted.model}).` : "Ollama spento.";
+  const model = extracted.model
+    ? `Ollama acceso (${extracted.model}).`
+    : extracted.reason === "no_evidence"
+      ? "Nessuna schermata letta."
+      : "Ollama spento.";
   const episodes =
-    extracted.reason === "analyzed" || extracted.reason === "already_analyzed"
+    extracted.reason === "accepted" || extracted.reason === "already_analyzed"
       ? `Episodi estratti: ${extracted.episodes ?? 0}.`
       : "Nessun episodio estratto.";
+  const question = extracted.analysis === "awaiting_answer" ? " C'è una domanda per te." : "";
   const cadence =
     written.issued && written.path
       ? `Mini report: ${written.path}`
       : "Prossimo mini report tra 3 giorni.";
-  return `${model} ${episodes} ${cadence}`;
+  return `${model} ${episodes}${question} ${cadence}`;
 }
 
 app.setName("Octo Core");
@@ -179,6 +174,19 @@ app.whenReady().then(() => {
   for (const channel of ALLOWED) {
     ipcMain.handle(channel, async (_event, payload: unknown) => {
       if (channel === "octo:getState") return state;
+      if (channel === "octo:answer") {
+        const reply = await request({ cmd: "question.answer", ...parseAnswer(payload) }, 150_000);
+        state.note = answerNote(reply.result);
+        await refreshQuestions();
+        publish();
+        return state;
+      }
+      if (channel === "octo:defer") {
+        await request({ cmd: "question.defer", questionId: parseQuestionId(payload) });
+        await refreshQuestions();
+        publish();
+        return state;
+      }
       if (channel === "octo:start") {
         const sourceIds = Array.isArray(payload)
           ? payload.filter((id): id is string => typeof id === "string")
@@ -191,13 +199,18 @@ app.whenReady().then(() => {
           sourceIds,
           purpose: "Sessione",
         });
-        await request({
-          cmd: "capture.frame",
-          frameId: "live-1",
-          sourceId: sourceIds[0],
-          offsetMs: 1_000,
-          payload: "schermo",
-        });
+        if (captureMode === "synthetic") {
+          await request({
+            cmd: "capture.frame",
+            frameId: "live-1",
+            sourceId: sourceIds[0],
+            offsetMs: 1_000,
+            payload: "schermo",
+          });
+        } else {
+          capture.start(sourceIds);
+          if (screenPermission() === "denied") state.note = PERMISSION_NOTE;
+        }
         state.capture = "recording";
         for (const source of state.sources) source.selected = sourceIds.includes(source.id);
         if (!mascot) mascot = createWindow("mascot");
@@ -206,14 +219,17 @@ app.whenReady().then(() => {
         return state;
       }
       if (channel === "octo:pause") {
-        await request({ cmd: "session.pause" });
-        await request({
-          cmd: "capture.frame",
-          frameId: "after-pause",
-          sourceId: "mon-1",
-          offsetMs: 999_999,
-          payload: "dopo-pausa",
-        });
+        await capture.stop();
+        await request({ cmd: "session.pause" }, 150_000);
+        if (captureMode === "synthetic") {
+          await request({
+            cmd: "capture.frame",
+            frameId: "after-pause",
+            sourceId: "mon-1",
+            offsetMs: 999_999,
+            payload: "dopo-pausa",
+          });
+        }
         state.capture = "paused";
         publish();
         return state;
@@ -226,12 +242,14 @@ app.whenReady().then(() => {
 
   createWindow("dashboard");
   void request({ cmd: "handshake", clientVersion: 1 })
+    .then(() => refreshQuestions())
     .then(() => request({ cmd: "model.status" }))
     .then((reply) => {
-      if (process.env.OCTO_MODEL === "off") return;
-      const status = reply.result as { up?: boolean; model?: string | null };
-      state.note =
-        status.up && status.model ? `Ollama acceso (${status.model}).` : "Ollama spento.";
+      if (process.env.OCTO_MODEL !== "off") {
+        const status = reply.result as { up?: boolean; model?: string | null };
+        state.note =
+          status.up && status.model ? `Ollama acceso (${status.model}).` : "Ollama spento.";
+      }
       publish();
     })
     .catch(() => undefined);

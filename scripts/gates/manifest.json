@@ -16,10 +16,7 @@
     "A01": {
       "track": "automatic",
       "integration": "tests/integration/A01.monorepo-gates.test.ts",
-      "unit": [
-        "scripts/gates/inspect.unit.test.ts",
-        "scripts/gates/scan-secrets.unit.test.ts"
-      ],
+      "unit": ["scripts/gates/inspect.unit.test.ts", "scripts/gates/scan-secrets.unit.test.ts"],
       "evidenceRequired": true
     },
     "A02": {
@@ -51,6 +48,9 @@
       "integration": "tests/integration/A06.model-policy.test.ts",
       "unit": [
         "apps/engine/src/analysis/ollama.unit.test.ts",
+        "apps/engine/src/analysis/openrouter.unit.test.ts",
+        "apps/engine/src/analysis/policy.unit.test.ts",
+        "apps/engine/src/analysis/reply.unit.test.ts",
         "apps/engine/src/reports/cadence.unit.test.ts"
       ],
       "evidenceRequired": true
@@ -58,7 +58,10 @@
     "A07": {
       "track": "automatic",
       "integration": "tests/integration/A07.episodes-questions.test.ts",
-      "unit": ["apps/engine/src/analysis/questions.unit.test.ts"],
+      "unit": [
+        "apps/engine/src/analysis/questions.unit.test.ts",
+        "apps/engine/src/domain/frame-timeline.unit.test.ts"
+      ],
       "evidenceRequired": true
     },
     "A08": {
@@ -82,7 +85,7 @@
     "A11": {
       "track": "automatic",
       "integration": "tests/integration/A11.video-capture-port.test.ts",
-      "unit": [],
+      "unit": ["apps/engine/src/capture/ocr.unit.test.ts"],
       "evidenceRequired": true
     },
     "A12": {

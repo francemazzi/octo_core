@@ -25,6 +25,10 @@ describe("A06 model policy", () => {
     const sent = JSON.parse(audits[0]?.detail_json ?? "{}") as { evidenceIds: string[] };
     expect(sent.evidenceIds).toEqual(["ev-frame-a1"]);
     expect(fetchSpy).not.toHaveBeenCalled();
+    const cloudRun = engine.db
+      .prepare("SELECT outcome FROM analysis_runs WHERE data_mode = 'cloud_after_review'")
+      .get() as { outcome: string };
+    expect(cloudRun.outcome).toBe("rejected");
 
     expect(() =>
       acceptModelOutput(
