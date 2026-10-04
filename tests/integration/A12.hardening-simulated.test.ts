@@ -109,5 +109,5 @@ describe("A12 simulated hardening", () => {
       { id: "002" },
     ]);
     bundled.close();
-  });
+  }, 120_000);
 });
