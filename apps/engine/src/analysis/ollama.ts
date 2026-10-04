@@ -6,9 +6,9 @@ import {
   EPISODES_PROMPT_SCHEMA,
   EPISODES_SYSTEM_PROMPT,
   evidenceLines,
-  normalizeReply,
-  parseModelReply,
-} from "./reply.js";
+  evidenceResolver,
+} from "./prompt.js";
+import { normalizeReply, parseModelReply } from "./reply.js";
 
 const DEFAULT_BASE = "http://127.0.0.1:11434";
 const PREFERRED_MODELS = [
@@ -75,6 +75,7 @@ export async function askOllama(
       model,
       stream: false,
       format: "json",
+      options: { num_ctx: 8_192, temperature: 0.2 },
       messages: [
         { role: "system", content: EPISODES_SYSTEM_PROMPT },
         { role: "user", content: prompt },
@@ -110,8 +111,11 @@ export function createOllamaAdapter(
         options.fetchImpl,
         base,
       );
-      const known = new Set(evidence.map((item) => item.id));
-      const raw = normalizeReply(parseModelReply(content), known, randomUUID().slice(0, 8));
+      const raw = normalizeReply(
+        parseModelReply(content),
+        evidenceResolver(evidence),
+        randomUUID().slice(0, 8),
+      );
       return { model: status.model, raw };
     },
   };

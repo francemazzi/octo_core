@@ -90,6 +90,18 @@ describe("A02 engine process", () => {
     });
     expect(answer.result).toEqual({ status: "accepted", analysis: "completed" });
 
+    const listedSessions = await engine.request({ cmd: "session.list" });
+    const sessions = (
+      listedSessions.result as { sessions: Array<{ sessionId: string; title: string }> }
+    ).sessions;
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.title).toBe("Inserimento ordine cliente");
+    const detail = await engine.request({
+      cmd: "session.detail",
+      sessionId: sessions[0]?.sessionId,
+    });
+    expect((detail.result as { episodes: unknown[] }).episodes).toHaveLength(2);
+
     const removed = await engine.request({ cmd: "analysis.local" });
     expect(removed.error?.code).toBe("invalid_payload");
     await engine.close();

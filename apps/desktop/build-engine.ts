@@ -1,8 +1,8 @@
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, type Plugin } from "esbuild";
+import { nodeResolvePlugin } from "./build-resolve.js";
 
 const desktopRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(desktopRoot, "..", "..");
@@ -17,42 +17,32 @@ const fixtures: Record<string, string> = {
   "model-output.json": readRepo("packages/test-fixtures/model-output.json"),
 };
 
-const migrationSql = readRepo("apps/engine/src/storage/migrations/001_init.sql");
-const requireFromEngine = createRequire(join(repoRoot, "apps/engine/package.json"));
-
-function resolvePackage(specifier: string, importer: string): string {
-  const origin =
-    importer.includes("node_modules") || importer.endsWith(".js")
-      ? importer
-      : join(repoRoot, "apps/engine/package.json");
-  try {
-    return createRequire(origin).resolve(specifier);
-  } catch {
-    return requireFromEngine.resolve(specifier);
-  }
-}
-
-const nodeResolve: Plugin = {
-  name: "node-resolve",
-  setup(pluginBuild) {
-    pluginBuild.onResolve({ filter: /^node:/ }, (args) => ({ path: args.path, external: true }));
-    pluginBuild.onResolve({ filter: /^[^./]/ }, (args) => ({
-      path: resolvePackage(args.path, args.importer),
-    }));
-  },
-};
+const migrationsDir = "apps/engine/src/storage/migrations";
+const migrations: Record<string, string> = Object.fromEntries(
+  readdirSync(join(repoRoot, migrationsDir))
+    .filter((name) => name.endsWith(".sql"))
+    .map((name) => [name, readRepo(`${migrationsDir}/${name}`)]),
+);
+const nodeResolve = nodeResolvePlugin({ anchor: join(repoRoot, "apps/engine/package.json") });
 
 const inlineAssets: Plugin = {
   name: "inline-assets",
   setup(pluginBuild) {
     pluginBuild.onLoad({ filter: /storage\/db\.ts$/ }, (args) => {
       const source = readFileSync(args.path, "utf8");
-      const needle = 'readFileSync(new URL("./migrations/001_init.sql", import.meta.url), "utf8")';
+      const needle = 'readFileSync(new URL(`./migrations/${file}`, import.meta.url), "utf8")';
       if (!source.includes(needle)) throw new Error(`migration read not found in ${args.path}`);
-      return {
-        contents: source.replace(needle, JSON.stringify(migrationSql)),
-        loader: "ts",
-      };
+      const listed = [...source.matchAll(/"(\d{3}_[a-z_]+\.sql)"/g)].map((match) => match[1]);
+      const missing = listed.filter((name) => name && migrations[name] === undefined);
+      if (listed.length === 0 || missing.length > 0) {
+        throw new Error(`migrations not bundled: ${missing.join(", ") || "none listed"}`);
+      }
+      const replacement = `((files: Record<string, string>) => {
+    const sql = files[file];
+    if (sql === undefined) throw new Error("missing migration " + file);
+    return sql;
+  })(${JSON.stringify(migrations)})`;
+      return { contents: source.replace(needle, replacement), loader: "ts" };
     });
     pluginBuild.onLoad({ filter: /test-fixtures\/src\/load\.ts$/ }, (args) => {
       const source = readFileSync(args.path, "utf8");

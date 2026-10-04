@@ -37,7 +37,7 @@ Cartelle per attività + clip + report DOCX
 | Passaggio | Esperienza prevista |
 | --- | --- |
 | **Configura** | Scegli uno o due monitor, oppure una finestra, e definisci il perimetro di acquisizione. |
-| **Registra** | Avvia la sessione. La mascotte nell'angolo dello schermo mostra lo stato e rende disponibili pausa, arresto e note. |
+| **Registra** | Avvia la sessione. Il logo in alto a destra mostra lo stato e, al passaggio del mouse, pausa, ripresa e arresto. La finestra di Octo elenca le sessioni per giorno con le attività riconosciute e un riassunto. |
 | **Chiarisci** | Rispondi a poche domande pertinenti, per esempio: «Questi passaggi appartengono allo stesso ordine?». Puoi rinviarle. |
 | **Rivedi** | Conferma, correggi, dividi o unisci le attività. I segmenti senza evidenze sufficienti restano non classificati. |
 | **Esporta** | Ottieni attività documentate, screenshot selezionati, brevi video e un riepilogo DOCX collegato alle evidenze. |

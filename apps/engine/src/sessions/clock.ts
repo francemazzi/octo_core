@@ -22,13 +22,18 @@ export function assertSingleEpoch(epochIds: string[]): void {
   }
 }
 
-/** Session time in the current clock epoch: last event offset minus first event offset. */
+/**
+ * Session time in the current clock epoch: latest offset minus earliest offset. Frames read by OCR
+ * after a pause or stop are stored later but keep their capture offset, so the order of rows does
+ * not matter.
+ */
 export function sessionDurationMs(db: Sql, sessionId: string, epochId: string): number {
-  const rows = db
+  const row = db
     .prepare(
-      "SELECT offset_ms FROM capture_events WHERE session_id = ? AND epoch_id = ? ORDER BY sequence",
+      `SELECT COUNT(*) AS count, MIN(offset_ms) AS first, MAX(offset_ms) AS last
+       FROM capture_events WHERE session_id = ? AND epoch_id = ?`,
     )
-    .all(sessionId, epochId) as Array<{ offset_ms: number }>;
-  if (rows.length < 2) return 0;
-  return durationFromOffsets(rows[0]?.offset_ms ?? 0, rows[rows.length - 1]?.offset_ms ?? 0);
+    .get(sessionId, epochId) as { count: number; first: number | null; last: number | null };
+  if (row.count < 2 || row.first === null || row.last === null) return 0;
+  return durationFromOffsets(row.first, row.last);
 }

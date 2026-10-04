@@ -11,7 +11,7 @@ export function createFixtureAdapter(locality: ModelLocality): ModelAdapter {
   return {
     provider: "fixture",
     locality,
-    promptSchema: "model-output@1",
+    promptSchema: "model-output@2",
     status: () => Promise.resolve({ up: true, model: "mock" }),
     interpret: () => Promise.resolve({ model: "mock", raw: fixtureOutput() }),
   };

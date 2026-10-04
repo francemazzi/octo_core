@@ -35,9 +35,9 @@ Controllo autonomo del PC, scrittura nei gestionali, email, registrazione nascos
 Pochi comandi, come un'app di sistema:
 
 - Un'azione primaria: Avvia, solo dopo la scelta esplicita dello schermo.
-- Durante la registrazione la mascotte espone solo Pausa e Stop.
+- La mascotte è solo il logo, in alto a destra dello schermo principale e sempre visibile: un puntino rosso (registra) o giallo (pausa), un badge per le domande. Al passaggio del mouse espone solo Pausa/Riprendi e Stop; un clic apre Octo.
 - Al massimo tre domande al giorno, una alla volta, rinviabili.
 - In revisione: conferma, dividi, unisci.
 - Export: un riepilogo.
 
-La mascotte usa `logo_octo.png`. Nessuna seconda palette oltre ai colori di quel logo.
+La mascotte usa `logo_octo.png`. Nessuna seconda palette oltre ai colori di quel logo, salvo i puntini di stato rosso e giallo.

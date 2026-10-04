@@ -7,6 +7,11 @@ import { acceptModelOutput, evidenceIdsForMode, type DataMode } from "./policy.j
 
 const MAX_EVIDENCE = 200;
 const MAX_TEXT_CHARS = 500;
+const MIN_TEXT_CHARS = 120;
+/** Screen text budget for one prompt, split across the evidence so long sessions fit the context. */
+const PROMPT_TEXT_BUDGET = 24_000;
+/** A local model that answered with nothing gets one more try, unless it was already slow. */
+const RETRY_WITHIN_MS = 60_000;
 
 export type InterpretReason =
   | "accepted"
@@ -94,14 +99,40 @@ export async function interpretSession(
         JSON.stringify({ evidenceIds: ids, provider: adapter.provider }),
       );
   }
+  const textChars = Math.min(
+    MAX_TEXT_CHARS,
+    Math.max(MIN_TEXT_CHARS, Math.floor(PROMPT_TEXT_BUDGET / selected.length)),
+  );
   const evidence: ModelEvidence[] = selected.map((row) => ({
     id: row.id,
     sourceId: row.source_id,
     startMs: row.start_ms,
-    text: row.asset_id ? deps.readText(row.asset_id).slice(0, MAX_TEXT_CHARS) : "",
+    text: row.asset_id ? deps.readText(row.asset_id).slice(0, textChars) : "",
   }));
-  const base = { sessionId: input.sessionId, mode: input.mode };
+  const run = { deps, adapter, evidence, ids, input };
+  const startedAt = Date.now();
+  const first = await attempt(run);
+  const retry =
+    adapter.locality === "local" &&
+    first.code === "empty_output" &&
+    Date.now() - startedAt < RETRY_WITHIN_MS;
+  return retry ? (await attempt(run)).result : first.result;
+}
 
+type Attempt = {
+  deps: InterpretDeps;
+  adapter: ModelAdapter;
+  evidence: ModelEvidence[];
+  ids: string[];
+  input: { sessionId: string; mode: DataMode; windowMs: number };
+};
+
+/** One call to the model, validated and recorded in `analysis_runs` whatever the outcome. */
+async function attempt({ deps, adapter, evidence, ids, input }: Attempt): Promise<{
+  result: InterpretResult;
+  code?: string;
+}> {
+  const base = { sessionId: input.sessionId, mode: input.mode };
   let reply;
   try {
     reply = await adapter.interpret(evidence);
@@ -115,7 +146,8 @@ export async function interpretSession(
       outcome: unavailable ? "unavailable" : "error",
       detail: { input: ids, error: code, message },
     });
-    return { output: null, model: null, reason: unavailable ? "model_unavailable" : "model_error" };
+    const reason = unavailable ? "model_unavailable" : "model_error";
+    return { result: { output: null, model: null, reason }, code };
   }
 
   try {
@@ -124,10 +156,15 @@ export async function interpretSession(
       ...base,
       model: reply.model,
       outcome: "accepted",
-      detail: { input: ids, episodes: output.episodes, questions: output.questions ?? [] },
+      detail: {
+        input: ids,
+        title: output.title ?? null,
+        episodes: output.episodes,
+        questions: output.questions ?? [],
+      },
       usage: reply.usage,
     });
-    return { output, model: reply.model, reason: "accepted" };
+    return { result: { output, model: reply.model, reason: "accepted" } };
   } catch (error) {
     if (!(error instanceof OctoError)) throw error;
     recordRun(deps, adapter, {
@@ -137,7 +174,10 @@ export async function interpretSession(
       detail: { input: ids, error: error.code },
       usage: reply.usage,
     });
-    return { output: null, model: reply.model, reason: "unusable_output" };
+    return {
+      result: { output: null, model: reply.model, reason: "unusable_output" },
+      code: error.code,
+    };
   }
 }
 

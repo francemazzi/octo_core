@@ -13,14 +13,12 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
     case "session.start":
       return engine.startSession(command);
     case "session.pause":
-      await engine.drainCapture();
       engine.pauseSession();
       return { capture: "paused" };
     case "session.resume":
       engine.resumeSession();
       return { capture: "recording" };
     case "session.stop":
-      await engine.drainCapture();
       engine.stopSession();
       return { capture: "stopped" };
     case "session.state":
@@ -32,7 +30,7 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
     case "capture.image":
       return engine.captureImage(command);
     case "analysis.run":
-      return engine.runAnalysis(command.mode);
+      return engine.runAnalysis(command.mode, command.sessionId);
     case "model.status":
       return engine.modelStatus();
     case "report.tick":
@@ -41,6 +39,10 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
       return engine.answerQuestion(command);
     case "question.list":
       return { questions: engine.openQuestions() };
+    case "session.list":
+      return { sessions: engine.listSessions(command.limit) };
+    case "session.detail":
+      return engine.sessionDetail(command.sessionId);
     case "question.defer":
       engine.deferQuestion(command.questionId);
       return { status: "deferred" };
@@ -66,13 +68,36 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
   }
 }
 
-export async function serve(engine: Engine = startEngine()): Promise<void> {
-  const lines = createInterface({ input: process.stdin });
-  const write = (message: unknown) => {
-    process.stdout.write(`${JSON.stringify(message)}\n`);
-  };
-  for await (const line of lines) {
-    if (!line.trim()) continue;
+/** Commands that may wait on a model or the disk: they share one lane and answer when done. */
+const SLOW_COMMANDS: ReadonlySet<EngineCommand["cmd"]> = new Set([
+  "analysis.run",
+  "question.answer",
+  "export.run",
+  "report.tick",
+  "session.delete",
+]);
+const SHUTDOWN_WAIT_MS = 5_000;
+
+type Write = (message: unknown) => void;
+
+/**
+ * Parses one protocol line and answers it. Fast commands (pause, stop, start, state, lists) answer
+ * at once, even while an analysis runs in the slow lane; replies are matched by `id`.
+ */
+export function createProtocolHandler(engine: Engine, write: Write) {
+  let lane: Promise<void> = Promise.resolve();
+
+  async function respond(id: string, command: EngineCommand): Promise<void> {
+    try {
+      write({ v: 1, id, ok: true, result: await dispatch(engine, command) });
+    } catch (error) {
+      const code = error instanceof OctoError ? error.code : "internal";
+      const message = error instanceof Error ? error.message : "error";
+      write({ v: 1, id, ok: false, error: { code, message } });
+    }
+  }
+
+  function parse(line: string): { id: string; command: EngineCommand } | undefined {
     let raw: unknown;
     try {
       raw = JSON.parse(line) as unknown;
@@ -83,18 +108,14 @@ export async function serve(engine: Engine = startEngine()): Promise<void> {
         ok: false,
         error: { code: "invalid_payload", message: "malformed json" },
       });
-      continue;
+      return undefined;
     }
     const record = raw as { v?: unknown; id?: unknown };
     const id = typeof record.id === "string" ? record.id : "unknown";
     if (record.v !== PROTOCOL_VERSION) {
-      write({
-        v: 1,
-        id,
-        ok: false,
-        error: { code: "incompatible_version", message: `unsupported version ${String(record.v)}` },
-      });
-      continue;
+      const message = `unsupported version ${String(record.v)}`;
+      write({ v: 1, id, ok: false, error: { code: "incompatible_version", message } });
+      return undefined;
     }
     const parsed = engineCommandSchema.safeParse(raw);
     if (!parsed.success) {
@@ -104,20 +125,50 @@ export async function serve(engine: Engine = startEngine()): Promise<void> {
         ok: false,
         error: { code: "invalid_payload", message: "schema rejected" },
       });
-      continue;
+      return undefined;
     }
-    try {
-      const result = await dispatch(engine, parsed.data);
-      write({ v: 1, id, ok: true, result });
-      if (parsed.data.cmd === "shutdown") {
+    return { id, command: parsed.data };
+  }
+
+  return {
+    /** Handles one line; resolves `true` once the engine has shut down. */
+    async handle(line: string): Promise<boolean> {
+      if (!line.trim()) return false;
+      const request = parse(line);
+      if (!request) return false;
+      if (request.command.cmd === "shutdown") {
+        await Promise.race([Promise.all([lane, engine.drainCapture()]), delay(SHUTDOWN_WAIT_MS)]);
+        await respond(request.id, request.command);
         engine.close();
-        lines.close();
-        return;
+        return true;
       }
-    } catch (error) {
-      const code = error instanceof OctoError ? error.code : "internal";
-      const message = error instanceof Error ? error.message : "error";
-      write({ v: 1, id, ok: false, error: { code, message } });
+      if (SLOW_COMMANDS.has(request.command.cmd)) {
+        lane = lane.then(() => respond(request.id, request.command));
+        return false;
+      }
+      await respond(request.id, request.command);
+      return false;
+    },
+    /** Resolves when every slow command queued so far has answered. */
+    idle(): Promise<void> {
+      return lane;
+    },
+  };
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms).unref());
+}
+
+export async function serve(engine: Engine = startEngine()): Promise<void> {
+  const lines = createInterface({ input: process.stdin });
+  const handler = createProtocolHandler(engine, (message) => {
+    process.stdout.write(`${JSON.stringify(message)}\n`);
+  });
+  for await (const line of lines) {
+    if (await handler.handle(line)) {
+      lines.close();
+      return;
     }
   }
 }
@@ -125,6 +176,7 @@ export async function serve(engine: Engine = startEngine()): Promise<void> {
 function startEngine(): Engine {
   const engine = createEngine(requiredDataDir(), runtimeOptions());
   engine.reopenActiveEpochs();
+  engine.releaseStaleAnalyses();
   return engine;
 }
 

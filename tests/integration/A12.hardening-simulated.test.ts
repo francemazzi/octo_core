@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { createEngine, diagnosticGuide } from "@octo/engine";
 import { EngineProcess } from "../helpers/process.js";
@@ -92,5 +93,21 @@ describe("A12 simulated hardening", () => {
     expect(readFileSync(join(process.cwd(), "dist-win", "UNSIGNED.txt"), "utf8")).toContain(
       "not Authenticode",
     );
+
+    execFileSync("pnpm", ["--filter", "@octo/desktop", "bundle-engine"], { cwd: process.cwd() });
+    const bundledDir = mkdtempSync(join(tmpdir(), "octo-bundled-"));
+    const replies = execFileSync("node", ["apps/desktop/dist/engine.mjs"], {
+      cwd: process.cwd(),
+      input: `${JSON.stringify({ v: 1, id: "h", cmd: "handshake", clientVersion: 1 })}\n${JSON.stringify({ v: 1, id: "bye", cmd: "shutdown" })}\n`,
+      env: { ...process.env, OCTO_DATA_DIR: bundledDir, OCTO_MODEL: "off", NODE_NO_WARNINGS: "1" },
+      encoding: "utf8",
+    });
+    expect(replies).toContain('"status":"bye"');
+    const bundled = new DatabaseSync(join(bundledDir, "octo.db"));
+    expect(bundled.prepare("SELECT id FROM schema_migrations ORDER BY id").all()).toEqual([
+      { id: "001" },
+      { id: "002" },
+    ]);
+    bundled.close();
   });
 });

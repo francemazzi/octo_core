@@ -52,16 +52,15 @@ export function writeEpisodes(db: Sql, input: EpisodeWrite): number {
     .get(input.sessionId) as { count: number };
   if (existing.count > 0) return 0;
 
-  const types = new Map(
-    input.output.episodes.map((episode) => [episode.episodeId, episode.activityType]),
-  );
+  const proposed = new Map(input.output.episodes.map((episode) => [episode.episodeId, episode]));
   const stretches = input.stretches.filter(
-    (stretch) => stretch.episodeId === null || types.has(stretch.episodeId),
+    (stretch) => stretch.episodeId === null || proposed.has(stretch.episodeId),
   );
   const summary = summarizeAssignedTime(stretches, input.authorized);
   const insertEpisode = db.prepare(
-    `INSERT INTO episodes (id, session_id, activity_type, case_id, objective, review_state, duration_ms)
-     VALUES (?, ?, ?, NULL, ?, 'proposed', ?)`,
+    `INSERT INTO episodes (
+      id, session_id, activity_type, case_id, objective, review_state, duration_ms, label, summary
+    ) VALUES (?, ?, ?, NULL, ?, 'proposed', ?, ?, ?)`,
   );
   const insertInterval = db.prepare(
     `INSERT INTO episode_intervals (
@@ -72,13 +71,15 @@ export function writeEpisodes(db: Sql, input: EpisodeWrite): number {
   db.exec("BEGIN");
   try {
     for (const [episodeId, durationMs] of Object.entries(summary.byEpisodeMs)) {
-      const activityType = types.get(episodeId) ?? "activity";
+      const episode = proposed.get(episodeId);
       insertEpisode.run(
         episodeId,
         input.sessionId,
-        activityType,
+        episode?.activityType ?? "activity",
         `Attività ${episodeId}`,
         durationMs,
+        episode?.label ?? null,
+        episode?.summary ?? null,
       );
       for (const stretch of stretches) {
         if (stretch.episodeId !== episodeId || stretch.assignment !== "primary") continue;
@@ -102,10 +103,25 @@ export function writeEpisodes(db: Sql, input: EpisodeWrite): number {
       `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
        VALUES (?, ?, ?, 'time_summary', ?)`,
     ).run(randomUUID(), input.sessionId, input.wallTime, JSON.stringify(summary));
+    const title = input.output.title ?? longestLabel(input.output, summary.byEpisodeMs);
+    db.prepare("UPDATE sessions SET title = ? WHERE id = ? AND title IS NULL").run(
+      title ?? null,
+      input.sessionId,
+    );
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
   }
   return Object.keys(summary.byEpisodeMs).length;
+}
+
+/** Without a model title, the session is named after its longest labelled activity. */
+function longestLabel(
+  output: ModelOutput,
+  byEpisodeMs: Record<string, number>,
+): string | undefined {
+  return output.episodes
+    .filter((episode) => episode.label)
+    .sort((a, b) => (byEpisodeMs[b.episodeId] ?? 0) - (byEpisodeMs[a.episodeId] ?? 0))[0]?.label;
 }

@@ -56,6 +56,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@octo/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       electron:
         specifier: 44.5.1
         version: 44.5.1

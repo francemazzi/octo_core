@@ -58,4 +58,18 @@ describe("acceptModelOutput", () => {
     expect(codeOf(question("riga\u0007suono"))).toBe("invalid_model_output");
     expect(codeOf(question("x".repeat(301)))).toBe("invalid_model_output");
   });
+
+  it("bounds the Italian labels, summaries, and session title written by the model", () => {
+    const episode = { episodeId: "ep1", activityType: "a", evidenceIds: ["ev-a"] };
+    expect(
+      codeOf({ title: "Ordini", episodes: [{ ...episode, label: "Ordine", summary: "Fatto." }] }),
+    ).toBeNull();
+    expect(codeOf({ episodes: [{ ...episode, label: "riga\u0000due" }] })).toBe(
+      "invalid_model_output",
+    );
+    expect(codeOf({ episodes: [{ ...episode, summary: "x".repeat(301) }] })).toBe(
+      "invalid_model_output",
+    );
+    expect(codeOf({ title: "x".repeat(81), episodes: [episode] })).toBe("invalid_model_output");
+  });
 });

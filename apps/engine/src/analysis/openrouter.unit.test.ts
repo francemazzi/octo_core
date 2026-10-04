@@ -54,7 +54,7 @@ describe("OpenRouter adapter", () => {
       response_format: { type: "json_object" },
       provider: { data_collection: "deny", zdr: true, require_parameters: true },
     });
-    expect(JSON.stringify(captured[0]?.body.messages)).toContain("id=ev-a");
+    expect(JSON.stringify(captured[0]?.body.messages)).toContain("id=e1");
     expect(reply.raw).toMatchObject({
       episodes: [{ activityType: "order_entry", evidenceIds: ["ev-a"] }],
     });

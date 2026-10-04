@@ -396,6 +396,9 @@ Invarianti obbligatorie:
 - [x] **A10.04 — Sicurezza Electron.** Sandbox, contextIsolation, CSP, IPC allowlist [S3].
 - [x] **A10.05 — Chiusura app.** Termina sessione e stream.
 - [x] **A10.06 — Adapter cattura collegato.** `OCTO_CAPTURE=synthetic` default in test.
+- [x] **A10.07 — Logo nell'angolo.** Finestra trasparente in alto a destra, Pausa/Riprendi e Stop al passaggio, badge domande.
+- [x] **A10.08 — Sessioni per giorno.** Barra laterale con titolo, attività e riassunti; sessione attiva o avvio.
+- [ ] **A10.09 — Etichette nei report.** Usare nome e riassunto delle attività nel mini report e nel DOCX.
 - [x] **A10.G — Gate A10.** `pnpm gate A10` verde.
 
 **Test di integrazione:** `tests/integration/A10.desktop-shell.test.ts` — Electron in test (es. Playwright): start → pausa → stop; chiusura app termina sessione; nessun asset con timestamp acquisizione dopo pausa.

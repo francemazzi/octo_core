@@ -41,9 +41,17 @@ export function splitEpisode(db: Sql, episodeId: string, atMs: number): string {
   const episode = mustEpisode(db, episodeId);
   const newId = `${episodeId}-b`;
   db.prepare(
-    `INSERT INTO episodes (id, session_id, activity_type, case_id, objective, review_state, duration_ms)
-     VALUES (?, ?, ?, NULL, ?, 'proposed', 0)`,
-  ).run(newId, episode.session_id, episode.activity_type, episode.objective);
+    `INSERT INTO episodes (
+      id, session_id, activity_type, case_id, objective, review_state, duration_ms, label, summary
+    ) VALUES (?, ?, ?, NULL, ?, 'proposed', 0, ?, ?)`,
+  ).run(
+    newId,
+    episode.session_id,
+    episode.activity_type,
+    episode.objective,
+    episode.label,
+    episode.summary,
+  );
   const intervals = db
     .prepare("SELECT * FROM episode_intervals WHERE episode_id = ?")
     .all(episodeId) as unknown as IntervalRow[];
@@ -108,19 +116,21 @@ function refreshDuration(db: Sql, episodeId: string): void {
   db.prepare("UPDATE episodes SET duration_ms = ? WHERE id = ?").run(duration, episodeId);
 }
 
-function mustEpisode(
-  db: Sql,
-  episodeId: string,
-): {
+type EpisodeRow = {
   id: string;
   session_id: string;
   activity_type: string;
   objective: string;
-} {
+  label: string | null;
+  summary: string | null;
+};
+
+function mustEpisode(db: Sql, episodeId: string): EpisodeRow {
   const row = db
-    .prepare("SELECT id, session_id, activity_type, objective FROM episodes WHERE id = ?")
-    .get(episodeId) as
-    { id: string; session_id: string; activity_type: string; objective: string } | undefined;
+    .prepare(
+      "SELECT id, session_id, activity_type, objective, label, summary FROM episodes WHERE id = ?",
+    )
+    .get(episodeId) as EpisodeRow | undefined;
   if (!row) throw new OctoError("missing_episode", episodeId);
   return row;
 }

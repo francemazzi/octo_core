@@ -57,7 +57,7 @@ describe("local Ollama boundary", () => {
     const adapter = createOllamaAdapter({
       base: BASE,
       fetchImpl: ollamaStub(
-        { episodes: [{ episodeId: "ep", activityType: "mail", evidenceIds: ["ev-a"] }] },
+        { episodes: [{ episodeId: "ep", activityType: "mail", evidenceIds: ["e1"] }] },
         calls,
       ),
     });

@@ -1,3 +1,4 @@
+import { OctoError } from "../errors.js";
 import { assertAnalysisTransition, type AnalysisState } from "../sessions/machine.js";
 import type { Sql } from "../storage/db.js";
 import {
@@ -145,8 +146,9 @@ export function createAnalysisService(deps: AnalysisServiceDeps) {
 
   return {
     /** Re-entrant: a waiting or finished run in the same mode never calls the model again. */
-    async run(mode: DataMode): Promise<AnalysisResult> {
-      const session = deps.requireSession();
+    async run(mode: DataMode, sessionId?: string): Promise<AnalysisResult> {
+      const session = sessionId ? loadSession(sessionId) : deps.requireSession();
+      if (!session) throw new OctoError("missing_session", sessionId ?? "none");
       const pending = await pendingInterrupt(graphDeps, session);
       if (pending?.mode === mode) {
         // An answer stored before a crash resumes now instead of waiting forever.

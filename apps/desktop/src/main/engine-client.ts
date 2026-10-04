@@ -45,7 +45,13 @@ export function createEngineClient(
   const child = spawnEngine(dataDir, here);
   const pending = new Map<string, (reply: EngineReply) => void>();
   createInterface({ input: child.stdout }).on("line", (line) => {
-    const reply = JSON.parse(line) as EngineReply & { id: string };
+    let reply: EngineReply & { id: string };
+    try {
+      reply = JSON.parse(line) as EngineReply & { id: string };
+    } catch {
+      process.stderr.write(`engine wrote a non-protocol line: ${line.slice(0, 200)}\n`);
+      return;
+    }
     pending.get(reply.id)?.(reply);
     pending.delete(reply.id);
   });
@@ -54,7 +60,10 @@ export function createEngineClient(
     const id = randomUUID();
     child.stdin.write(`${JSON.stringify({ v: 1, id, ...command })}\n`);
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("engine timeout")), timeoutMs);
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error("engine timeout"));
+      }, timeoutMs);
       pending.set(id, (reply) => {
         clearTimeout(timer);
         if (!reply.ok) reject(new Error(reply.error?.message ?? "engine error"));

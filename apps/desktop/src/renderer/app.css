@@ -4,43 +4,56 @@
   --octopus: #c9a6f5;
   --octopus-shadow: #8b6bc4;
   --ink: #1c1c1e;
+  --ink-soft: rgba(28, 28, 30, 0.62);
+  --line: rgba(28, 28, 30, 0.08);
   --surface: #f7fbff;
   --highlight: #ffffff;
+  --recording: #e5484d;
+  --paused: #f5a524;
   color: var(--ink);
-  background: var(--surface);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-body {
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
   margin: 0;
+  height: 100%;
 }
 
-main {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 28px;
-  background: linear-gradient(180deg, var(--highlight), var(--sky-0));
+:root[data-view="dashboard"] body {
+  background: var(--surface);
 }
 
-.mascot {
-  align-items: center;
-  justify-content: center;
+:root[data-view="mascot"],
+:root[data-view="mascot"] body {
+  background: transparent;
+  overflow: hidden;
 }
 
 button {
   border: 0;
   border-radius: 999px;
-  background: var(--octopus);
+  background: var(--highlight);
   color: var(--ink);
-  padding: 10px 18px;
+  padding: 8px 16px;
   font: inherit;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(28, 28, 30, 0.14);
+}
+
+button.primary {
+  background: var(--octopus);
+  box-shadow: none;
 }
 
 button:disabled {
   opacity: 0.4;
+  cursor: default;
 }
 
 label {
@@ -49,40 +62,22 @@ label {
   align-items: center;
 }
 
-.questions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
+.muted {
+  color: var(--ink-soft);
 }
 
-.questions h2 {
-  margin: 0;
-  font-size: 1rem;
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
 
-.question {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 12px;
-  background: var(--highlight);
+.dot.recording {
+  background: var(--recording);
+  box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.2);
 }
 
-.question p {
-  margin: 0;
-}
-
-.question textarea {
-  font: inherit;
-  padding: 8px;
-  border: 1px solid var(--sky-1);
-  border-radius: 8px;
-  resize: vertical;
-}
-
-.question .actions {
-  display: flex;
-  gap: 8px;
+.dot.paused {
+  background: var(--paused);
 }

@@ -1,8 +1,7 @@
+import type { SessionQuestion } from "@octo/contracts";
 import { useState } from "react";
 
-export type UiQuestion = { questionId: string; episodeId: string; prompt: string; status: string };
-
-export function QuestionsPanel({ questions }: { questions: UiQuestion[] }) {
+export function QuestionsPanel({ questions }: { questions: SessionQuestion[] }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");

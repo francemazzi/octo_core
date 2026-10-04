@@ -5,9 +5,9 @@ import {
   EPISODES_PROMPT_SCHEMA,
   EPISODES_SYSTEM_PROMPT,
   evidenceLines,
-  normalizeReply,
-  parseModelReply,
-} from "./reply.js";
+  evidenceResolver,
+} from "./prompt.js";
+import { normalizeReply, parseModelReply } from "./reply.js";
 
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 export const DEFAULT_OPENROUTER_MODEL = "mistralai/mistral-small-3.2-24b-instruct";
@@ -70,10 +70,13 @@ export function createOpenRouterAdapter(options: OpenRouterOptions): ModelAdapte
       if (!response.ok) throw new Error(`openrouter ${response.status}`);
       const body = (await response.json()) as CompletionBody;
       const content = body.choices?.[0]?.message?.content ?? "";
-      const known = new Set(evidence.map((item) => item.id));
       return {
         model: body.model ?? model,
-        raw: normalizeReply(parseModelReply(content), known, randomUUID().slice(0, 8)),
+        raw: normalizeReply(
+          parseModelReply(content),
+          evidenceResolver(evidence),
+          randomUUID().slice(0, 8),
+        ),
         usage: usageOf(body.usage),
       };
     },

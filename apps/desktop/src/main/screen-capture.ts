@@ -4,7 +4,9 @@ import type { EngineRequest } from "./engine-client.js";
 const MAX_IMAGE_SIDE = 2_048;
 
 export type ScreenCapture = {
-  start(sourceIds: string[]): void;
+  /** `originMs` is the session start (wall clock), reused on resume so offsets keep growing. */
+  start(sourceIds: string[], originMs: number): void;
+  /** Stops the timer at once; the returned promise settles when the last screenshot is sent. */
   stop(): Promise<void>;
 };
 
@@ -16,7 +18,7 @@ export function screenPermission(): string {
 }
 
 /** `mon-1` is the primary display, then the others from left to right. */
-function orderedDisplays(): Display[] {
+export function orderedDisplays(): Display[] {
   const primary = screen.getPrimaryDisplay();
   const others = screen
     .getAllDisplays()
@@ -82,16 +84,17 @@ export function createScreenCapture(
   }
 
   return {
-    start(sourceIds) {
+    start(sourceIds, originMs) {
+      if (timer) clearInterval(timer);
       selected = sourceIds;
-      startedAt = Date.now();
+      startedAt = originMs;
       run();
       timer = setInterval(run, intervalMs);
     },
-    async stop() {
+    stop() {
       if (timer) clearInterval(timer);
       timer = undefined;
-      await running;
+      return running ?? Promise.resolve();
     },
   };
 }

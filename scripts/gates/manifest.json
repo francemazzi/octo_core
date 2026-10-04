@@ -22,13 +22,17 @@
     "A02": {
       "track": "automatic",
       "integration": "tests/integration/A02.contracts-engine-process.test.ts",
-      "unit": [],
+      "unit": ["apps/engine/src/protocol/serve.unit.test.ts"],
       "evidenceRequired": true
     },
     "A03": {
       "track": "automatic",
       "integration": "tests/integration/A03.sessions-schema.test.ts",
-      "unit": ["apps/engine/src/sessions/machine.unit.test.ts"],
+      "unit": [
+        "apps/engine/src/sessions/machine.unit.test.ts",
+        "apps/engine/src/sessions/clock.unit.test.ts",
+        "apps/engine/src/storage/db.unit.test.ts"
+      ],
       "evidenceRequired": true
     },
     "A04": {
@@ -60,7 +64,8 @@
       "integration": "tests/integration/A07.episodes-questions.test.ts",
       "unit": [
         "apps/engine/src/analysis/questions.unit.test.ts",
-        "apps/engine/src/domain/frame-timeline.unit.test.ts"
+        "apps/engine/src/domain/frame-timeline.unit.test.ts",
+        "apps/engine/src/sessions/listing.unit.test.ts"
       ],
       "evidenceRequired": true
     },
@@ -79,7 +84,10 @@
     "A10": {
       "track": "automatic",
       "integration": "tests/integration/A10.desktop-shell.test.ts",
-      "unit": [],
+      "unit": [
+        "apps/desktop/src/main/mascot-layout.unit.test.ts",
+        "apps/desktop/src/renderer/session-format.unit.test.ts"
+      ],
       "evidenceRequired": true
     },
     "A11": {

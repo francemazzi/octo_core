@@ -1,4 +1,5 @@
 import { build } from "esbuild";
+import { nodeResolvePlugin } from "./build-resolve.js";
 import { build as buildRenderer } from "vite";
 import rendererConfig from "./vite.renderer.config.js";
 
@@ -8,7 +9,7 @@ await build({
   platform: "node",
   format: "cjs",
   outfile: "dist/main.cjs",
-  external: ["electron"],
+  plugins: [nodeResolvePlugin({ external: ["electron"] })],
 });
 
 await build({
@@ -17,7 +18,7 @@ await build({
   platform: "node",
   format: "cjs",
   outfile: "dist/preload.cjs",
-  external: ["electron"],
+  plugins: [nodeResolvePlugin({ external: ["electron"] })],
 });
 
 await buildRenderer({ ...rendererConfig, configFile: false });

@@ -1,14 +1,19 @@
 {
+  "title": "Inserimento ordine cliente",
   "episodes": [
     {
       "episodeId": "episode-A",
       "activityType": "order_entry",
+      "label": "Inserimento ordine cliente",
+      "summary": "Inserimento dell'ordine A nel gestionale, con ricerca del codice articolo.",
       "evidenceIds": ["ev-frame-a1", "ev-frame-a1-mon2", "ev-frame-search"],
       "durationMs": 1500000
     },
     {
       "episodeId": "episode-B",
       "activityType": "interruption",
+      "label": "Risposta a una mail",
+      "summary": "Interruzione per leggere e rispondere a una mail.",
       "evidenceIds": ["ev-frame-b"],
       "durationMs": 300000
     }

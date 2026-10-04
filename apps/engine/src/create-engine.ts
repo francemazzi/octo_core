@@ -15,6 +15,7 @@ import type { OcrReader } from "./capture/ocr.js";
 import { InMemoryKeyProvider, type KeyProvider } from "./crypto/key-provider.js";
 import { computeEconomics } from "./domain/economics.js";
 import { assertSingleEpoch, durationFromOffsets, sessionDurationMs } from "./sessions/clock.js";
+import { listSessions, sessionDetail } from "./sessions/listing.js";
 import { assertCaptureTransition, type CaptureState } from "./sessions/machine.js";
 import { OctoError } from "./errors.js";
 import { fixtureProfile } from "./analysis/fixture-adapter.js";
@@ -175,7 +176,13 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
           `SELECT * FROM sessions WHERE project_id = ? AND capture_state IN ('recording', 'paused')`,
         )
         .get(input.projectId) as SessionRow | undefined;
-      if (existing) return { sessionId: existing.id, capture: existing.capture_state };
+      if (existing) {
+        return {
+          sessionId: existing.id,
+          capture: existing.capture_state,
+          startedWall: existing.started_wall,
+        };
+      }
       const project = db.prepare("SELECT id FROM projects WHERE id = ?").get(input.projectId) as
         { id: string } | undefined;
       if (!project) {
@@ -186,6 +193,7 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
       }
       const sessionId = randomUUID();
       const epochId = randomUUID();
+      const startedWall = nowWall();
       const origin = nowMono();
       db.prepare(
         `INSERT INTO sessions (
@@ -196,7 +204,7 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
         sessionId,
         input.projectId,
         input.operatorPseudonym,
-        nowWall(),
+        startedWall,
         JSON.stringify(input.sourceIds),
         epochId,
       );
@@ -214,7 +222,7 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
       }
       const session = requireSession();
       addEvent(session, "start", 0);
-      return { sessionId, capture: "recording" as const };
+      return { sessionId, capture: "recording" as const, startedWall };
     },
     transition(to: CaptureState): void {
       const session = active();
@@ -252,6 +260,16 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
          VALUES (?, ?, ?, 0, ?, ?, 'epoch', '{}')`,
       ).run(randomUUID(), sessionId, nowWall(), epochId, nextSequence(db, sessionId));
       return epochId;
+    },
+    /** A crash during analysis leaves `running`; on restart it becomes `pending` again. */
+    releaseStaleAnalyses(): number {
+      return Number(
+        db
+          .prepare(
+            "UPDATE sessions SET analysis_state = 'pending' WHERE analysis_state = 'running'",
+          )
+          .run().changes,
+      );
     },
     reopenActiveEpochs(): number {
       const rows = db
@@ -345,9 +363,13 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
     reportTick(nowMs = Date.now()) {
       return tickMiniReport({ db, dataDir, nowMs });
     },
-    async runAnalysis(mode: "local_only" | "cloud_after_review" | "cloud_live_authorized") {
+    /** The session is fixed before waiting for OCR, so a session started meanwhile is not analysed. */
+    async runAnalysis(
+      mode: "local_only" | "cloud_after_review" | "cloud_live_authorized",
+      sessionId: string = requireSession().id,
+    ) {
       await images.drain();
-      return analysis.run(mode);
+      return analysis.run(mode, sessionId);
     },
     answerQuestion(input: { questionId: string; episodeId: string; text: string }) {
       return analysis.answer(input);
@@ -357,6 +379,12 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
     },
     openQuestions() {
       return analysis.list();
+    },
+    listSessions(limit?: number) {
+      return listSessions(db, limit);
+    },
+    sessionDetail(sessionId: string) {
+      return sessionDetail(db, sessionId);
     },
     confirmEpisode(episodeId: string) {
       confirmEpisode(db, episodeId);

@@ -112,22 +112,32 @@ export type QuestionRow = {
   askedAtMs: number;
 };
 
+const QUESTION_COLUMNS = `id AS questionId, session_id AS sessionId, episode_id AS episodeId,
+  prompt, status, asked_at_ms AS askedAtMs`;
+
+/** Questions the operator can still answer. */
+export const OPEN_QUESTION_SQL = "status IN ('open', 'deferred')";
+
 export function findQuestion(db: Sql, questionId: string): QuestionRow | undefined {
-  return db
-    .prepare(
-      `SELECT id AS questionId, session_id AS sessionId, episode_id AS episodeId, prompt, status,
-       asked_at_ms AS askedAtMs FROM questions WHERE id = ?`,
-    )
-    .get(questionId) as QuestionRow | undefined;
+  return db.prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE id = ?`).get(questionId) as
+    QuestionRow | undefined;
 }
 
-/** Questions still waiting for the operator, newest first, across sessions. */
-export function listOpenQuestions(db: Sql, limit = 20): QuestionRow[] {
-  return db
-    .prepare(
-      `SELECT id AS questionId, session_id AS sessionId, episode_id AS episodeId, prompt, status,
-       asked_at_ms AS askedAtMs FROM questions WHERE status IN ('open', 'deferred')
-       ORDER BY asked_at_ms DESC LIMIT ?`,
-    )
-    .all(limit) as QuestionRow[];
+/** Questions still waiting for the operator, newest first, across sessions or for one session. */
+export function listOpenQuestions(
+  db: Sql,
+  options: { limit?: number; sessionId?: string } = {},
+): QuestionRow[] {
+  const limit = options.limit ?? 20;
+  const order = "ORDER BY asked_at_ms DESC LIMIT ?";
+  const rows = options.sessionId
+    ? db
+        .prepare(
+          `SELECT ${QUESTION_COLUMNS} FROM questions WHERE ${OPEN_QUESTION_SQL} AND session_id = ? ${order}`,
+        )
+        .all(options.sessionId, limit)
+    : db
+        .prepare(`SELECT ${QUESTION_COLUMNS} FROM questions WHERE ${OPEN_QUESTION_SQL} ${order}`)
+        .all(limit);
+  return rows as QuestionRow[];
 }

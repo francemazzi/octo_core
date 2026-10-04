@@ -50,7 +50,7 @@ describe("live OpenRouter (B06)", () => {
         expect(result.episodes).toBeGreaterThan(0);
 
         expect(sentBodies).toHaveLength(1);
-        expect(sentBodies[0]).toContain("ev-order");
+        expect(sentBodies[0]).toContain("id=e1");
         expect(sentBodies[0]).not.toContain("Nota privata");
         const audits = engine.networkAudits() as Array<{ detail_json: string }>;
         expect(JSON.parse(audits[0]?.detail_json ?? "{}")).toMatchObject({

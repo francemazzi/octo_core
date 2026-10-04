@@ -136,6 +136,7 @@ export const engineCommandSchema = z.discriminatedUnion("cmd", [
     id: z.string(),
     cmd: z.literal("analysis.run"),
     mode: z.enum(["local_only", "cloud_after_review", "cloud_live_authorized"]),
+    sessionId: z.string().min(1).max(100).optional(),
   }),
   z.object({
     v: z.number(),
@@ -182,6 +183,18 @@ export const engineCommandSchema = z.discriminatedUnion("cmd", [
   z.object({ v: z.number(), id: z.string(), cmd: z.literal("model.status") }),
   z.object({ v: z.number(), id: z.string(), cmd: z.literal("report.tick") }),
   z.object({ v: z.number(), id: z.string(), cmd: z.literal("question.list") }),
+  z.object({
+    v: z.number(),
+    id: z.string(),
+    cmd: z.literal("session.list"),
+    limit: z.number().int().min(1).max(500).optional(),
+  }),
+  z.object({
+    v: z.number(),
+    id: z.string(),
+    cmd: z.literal("session.detail"),
+    sessionId: z.string().min(1).max(100),
+  }),
   z.object({
     v: z.number(),
     id: z.string(),
