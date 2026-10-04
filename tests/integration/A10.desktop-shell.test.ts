@@ -8,11 +8,13 @@ import { _electron as electron, type ElectronApplication, type Page } from "play
 import { describe, expect, it } from "vitest";
 import { startDemo } from "../helpers/engine.js";
 
+/** On a fresh machine `require("electron")` first prints a download notice; the path is last. */
 function electronBinary(): string {
-  return execFileSync("node", ["-e", "process.stdout.write(require('electron'))"], {
+  const output = execFileSync("node", ["-e", "process.stdout.write(require('electron'))"], {
     cwd: join(process.cwd(), "apps/desktop"),
     encoding: "utf8",
   });
+  return output.trim().split("\n").at(-1) ?? output;
 }
 
 function launch(dataDir: string): Promise<ElectronApplication> {
