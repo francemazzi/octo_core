@@ -20,12 +20,14 @@ import { assertCaptureTransition, type CaptureState } from "./sessions/machine.j
 import { OctoError } from "./errors.js";
 import { fixtureProfile } from "./analysis/fixture-adapter.js";
 import type { AnalysisProfile } from "./analysis/model-adapter.js";
+import { createRemoteSlot, type RemoteModels } from "./analysis/remote-slot.js";
 import { createAnalysisService } from "./analysis/service.js";
 import { tickMiniReport } from "./reports/cadence.js";
 import { JobRunner, type JobRow } from "./jobs/runner.js";
 import { applyRetention, evaluateQuota } from "./jobs/quota.js";
 import { readDiagnostic, writeDiagnostic } from "./diagnostics/log.js";
 import { exportSessionTree, type ReportSnapshot } from "./reports/export.js";
+import { approveSessionEvidence } from "./review/approval.js";
 import { confirmEpisode, mergeEpisodes, reassignInterval, splitEpisode } from "./review/service.js";
 import { openDatabase, type Sql } from "./storage/db.js";
 import { MediaStore } from "./storage/media-store.js";
@@ -37,6 +39,8 @@ export type EngineOptions = {
   offline?: boolean;
   quotaThresholdBytes?: number;
   analysis?: AnalysisProfile;
+  /** Builds the remote model from a key the operator sets in the app (`model.configure`). */
+  remoteModels?: RemoteModels;
   ocr?: OcrReader;
 };
 
@@ -102,9 +106,21 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
       );
     },
   });
+  const profile = options.analysis ?? fixtureProfile();
+  const remote = createRemoteSlot({
+    profile,
+    models: options.remoteModels,
+    audit: (detail) =>
+      db
+        .prepare(
+          `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
+           VALUES (?, NULL, ?, 'model_configured', ?)`,
+        )
+        .run(randomUUID(), nowWall(), JSON.stringify(detail)),
+  });
   const analysis = createAnalysisService({
     db,
-    profile: options.analysis ?? fixtureProfile(),
+    profile,
     readText: (assetId) => media.readPlaintext(assetId).toString("utf8"),
     nowWall,
     requireSession: () => requireSession(),
@@ -357,8 +373,11 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
     drainCapture(): Promise<void> {
       return images.drain();
     },
-    modelStatus() {
-      return analysis.modelStatus();
+    async modelStatus() {
+      return { ...(await analysis.modelStatus()), remote: await remote.status() };
+    },
+    configureRemoteModel(input: Parameters<typeof remote.configure>[0]) {
+      return remote.configure(input);
     },
     reportTick(nowMs = Date.now()) {
       return tickMiniReport({ db, dataDir, nowMs });
@@ -385,6 +404,9 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
     },
     sessionDetail(sessionId: string) {
       return sessionDetail(db, sessionId);
+    },
+    approveSession(sessionId: string) {
+      return approveSessionEvidence(db, { sessionId, at: nowWall() });
     },
     confirmEpisode(episodeId: string) {
       confirmEpisode(db, episodeId);

@@ -63,6 +63,15 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
     case "session.delete":
       engine.deletePerimeter();
       return { status: "deleted" };
+    case "model.configure":
+      return {
+        remote: await engine.configureRemoteModel({
+          remote: command.remote,
+          verify: command.verify,
+        }),
+      };
+    case "review.approve":
+      return engine.approveSession(command.sessionId);
     default:
       throw new OctoError("invalid_payload", "unknown command");
   }
@@ -110,7 +119,10 @@ export function createProtocolHandler(engine: Engine, write: Write) {
       });
       return undefined;
     }
-    const record = raw as { v?: unknown; id?: unknown };
+    const record = (typeof raw === "object" && raw !== null ? raw : {}) as {
+      v?: unknown;
+      id?: unknown;
+    };
     const id = typeof record.id === "string" ? record.id : "unknown";
     if (record.v !== PROTOCOL_VERSION) {
       const message = `unsupported version ${String(record.v)}`;
@@ -144,6 +156,11 @@ export function createProtocolHandler(engine: Engine, write: Write) {
       }
       if (SLOW_COMMANDS.has(request.command.cmd)) {
         lane = lane.then(() => respond(request.id, request.command));
+        return false;
+      }
+      // Checking a key waits on the network: it must not hold Pausa or Stop behind it.
+      if (request.command.cmd === "model.configure") {
+        void respond(request.id, request.command);
         return false;
       }
       await respond(request.id, request.command);

@@ -9,6 +9,7 @@ import {
   type GraphSession,
   type PendingQuestion,
 } from "./graph.js";
+import { hasReviewedEpisodes } from "./episodes.js";
 import type { AnalysisProfile, ModelStatus } from "./model-adapter.js";
 import type { DataMode } from "./policy.js";
 import {
@@ -18,6 +19,7 @@ import {
   listOpenQuestions,
   type QuestionRow,
 } from "./questions.js";
+import { latestRun } from "./runs.js";
 
 export type AnalysisServiceDeps = {
   db: Sql;
@@ -37,6 +39,8 @@ export type AnalysisResult = {
   episodes: number;
   questionCount: number;
   capture: string;
+  /** Some evidence of the session was not sent to the model (session too long). */
+  partial: boolean;
 };
 
 export type AnswerResult = { status: "accepted" | "quarantined"; analysis: string | null };
@@ -65,13 +69,7 @@ export function createAnalysisService(deps: AnalysisServiceDeps) {
   }
 
   function lastModel(sessionId: string): string | null {
-    const row = db
-      .prepare(
-        `SELECT model FROM analysis_runs WHERE session_id = ? AND outcome = 'accepted'
-         ORDER BY rowid DESC LIMIT 1`,
-      )
-      .get(sessionId) as { model: string } | undefined;
-    return row?.model ?? null;
+    return latestRun(db, sessionId, { accepted: true })?.model ?? null;
   }
 
   function result(
@@ -99,6 +97,7 @@ export function createAnalysisService(deps: AnalysisServiceDeps) {
       episodes: count("episodes"),
       questionCount: count("questions"),
       capture: capture.capture_state,
+      partial: latestRun(db, sessionId)?.partial ?? false,
     };
   }
 
@@ -108,13 +107,27 @@ export function createAnalysisService(deps: AnalysisServiceDeps) {
     return to;
   }
 
-  /** Runs the graph between `running` and its outcome; a finished or crashed run passes `pending`. */
+  /**
+   * Runs the graph between `running` and its outcome; a finished or crashed run passes `pending`.
+   * A failed re-analysis keeps the activities already there: the session stays `completed` in
+   * its previous mode.
+   */
   async function execute(
     session: GraphSession,
     mode: DataMode,
     invoke: () => Promise<GraphRun>,
   ): Promise<AnalysisResult> {
-    const from = stored(session.id).analysis_state;
+    const before = stored(session.id);
+    const hadEpisodes = result(session.id, "pending", null, null).episodes > 0;
+    const settle = () => {
+      if (!hadEpisodes) return move(session.id, "running", "pending");
+      db.prepare("UPDATE sessions SET data_mode = ? WHERE id = ?").run(
+        before.data_mode,
+        session.id,
+      );
+      return move(session.id, "running", "completed");
+    };
+    const from = before.analysis_state;
     const ready =
       from === "completed" || from === "running" ? move(session.id, from, "pending") : from;
     move(session.id, ready, "running");
@@ -123,14 +136,19 @@ export function createAnalysisService(deps: AnalysisServiceDeps) {
     try {
       run = await invoke();
     } catch (error) {
-      move(session.id, "running", "pending");
+      settle();
       throw error;
     }
-    const analysis: AnalysisOutcome = run.interrupted
-      ? "awaiting_answer"
-      : run.reason === "accepted"
-        ? "completed"
-        : "pending";
+    if (!run.interrupted && run.reason !== "accepted") {
+      const settled = settle();
+      return result(
+        session.id,
+        settled === "completed" ? "completed" : "pending",
+        run.reason,
+        run.model,
+      );
+    }
+    const analysis: AnalysisOutcome = run.interrupted ? "awaiting_answer" : "completed";
     move(session.id, "running", analysis);
     return result(session.id, analysis, run.reason, run.model);
   }
@@ -160,6 +178,10 @@ export function createAnalysisService(deps: AnalysisServiceDeps) {
       const current = stored(session.id);
       if (current.analysis_state === "completed" && current.data_mode === mode) {
         return result(session.id, "completed", "already_analyzed", lastModel(session.id));
+      }
+      if (hasReviewedEpisodes(db, session.id)) {
+        const state = current.analysis_state === "completed" ? "completed" : "pending";
+        return result(session.id, state, "reviewed_session", lastModel(session.id));
       }
       return execute(session, mode, () => runSessionGraph(graphDeps, session, mode));
     },

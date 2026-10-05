@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { ModelOutput } from "@octo/contracts";
 import type { TimelineFrame } from "../domain/frame-timeline.js";
 import { summarizeAssignedTime, type Stretch } from "../domain/time.js";
+import { OctoError } from "../errors.js";
+import { assertNoPrimaryOverlap } from "../review/service.js";
 import type { Sql } from "../storage/db.js";
+import { OPEN_QUESTION_SQL } from "./questions.js";
 
 export type EpisodeWrite = {
   sessionId: string;
@@ -45,13 +48,25 @@ export function loadFrames(db: Sql, sessionId: string, epochId: string): Timelin
   });
 }
 
-/** Writes proposed episodes once per session; episode time is the union of its intervals. */
-export function writeEpisodes(db: Sql, input: EpisodeWrite): number {
-  const existing = db
-    .prepare("SELECT COUNT(*) AS count FROM episodes WHERE session_id = ?")
-    .get(input.sessionId) as { count: number };
-  if (existing.count > 0) return 0;
+/** A person confirmed or edited an activity of the session: no analysis may replace it. */
+export function hasReviewedEpisodes(db: Sql, sessionId: string): boolean {
+  const row = db
+    .prepare(
+      `SELECT 1 AS reviewed FROM episodes e WHERE e.session_id = ? AND (
+         e.review_state = 'confirmed'
+         OR EXISTS (SELECT 1 FROM episode_revisions r WHERE r.episode_id = e.id)
+       ) LIMIT 1`,
+    )
+    .get(sessionId);
+  return row !== undefined;
+}
 
+/**
+ * Replaces the proposed episodes of the session in one transaction: a new analysis (another
+ * model, a cloud run, evidence revoked) supersedes the open questions about the old ones.
+ * Episode time is the union of its intervals.
+ */
+export function writeEpisodes(db: Sql, input: EpisodeWrite): number {
   const proposed = new Map(input.output.episodes.map((episode) => [episode.episodeId, episode]));
   const stretches = input.stretches.filter(
     (stretch) => stretch.episodeId === null || proposed.has(stretch.episodeId),
@@ -70,6 +85,17 @@ export function writeEpisodes(db: Sql, input: EpisodeWrite): number {
 
   db.exec("BEGIN");
   try {
+    if (hasReviewedEpisodes(db, input.sessionId)) {
+      throw new OctoError("reviewed_session", input.sessionId);
+    }
+    const replaced = db
+      .prepare("DELETE FROM episodes WHERE session_id = ?")
+      .run(input.sessionId).changes;
+    const superseded = db
+      .prepare(
+        `UPDATE questions SET status = 'superseded' WHERE session_id = ? AND ${OPEN_QUESTION_SQL}`,
+      )
+      .run(input.sessionId).changes;
     for (const [episodeId, durationMs] of Object.entries(summary.byEpisodeMs)) {
       const episode = proposed.get(episodeId);
       insertEpisode.run(
@@ -103,11 +129,23 @@ export function writeEpisodes(db: Sql, input: EpisodeWrite): number {
       `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
        VALUES (?, ?, ?, 'time_summary', ?)`,
     ).run(randomUUID(), input.sessionId, input.wallTime, JSON.stringify(summary));
+    if (replaced > 0) {
+      db.prepare(
+        `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
+         VALUES (?, ?, ?, 'episodes_replaced', ?)`,
+      ).run(
+        randomUUID(),
+        input.sessionId,
+        input.wallTime,
+        JSON.stringify({ replaced, superseded, origin: input.origin }),
+      );
+    }
     const title = input.output.title ?? longestLabel(input.output, summary.byEpisodeMs);
-    db.prepare("UPDATE sessions SET title = ? WHERE id = ? AND title IS NULL").run(
+    db.prepare("UPDATE sessions SET title = COALESCE(?, title) WHERE id = ?").run(
       title ?? null,
       input.sessionId,
     );
+    assertNoPrimaryOverlap(db, input.sessionId);
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");

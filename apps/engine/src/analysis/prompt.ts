@@ -1,7 +1,7 @@
-import type { ModelEvidence } from "./model-adapter.js";
+import type { KnownActivity, ModelEvidence } from "./model-adapter.js";
 
 /** Shared by every model adapter; bump the version whenever the prompt changes. */
-export const EPISODES_PROMPT_SCHEMA = "episodes@4";
+export const EPISODES_PROMPT_SCHEMA = "episodes@5";
 
 export const EPISODES_SYSTEM_PROMPT = [
   "You read text captured from the screen during one work session and group the evidence lines into work activities.",
@@ -16,6 +16,11 @@ export const EPISODES_SYSTEM_PROMPT = [
   'Ask at most 2 questions, only when you are unsure which activity some evidence belongs to; otherwise return "questions":[].',
 ].join(" ");
 
+/** Screen text stays on its own line: no control or line-separator character can open a new one. */
+function oneLine(text: string): string {
+  return text.replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, " ");
+}
+
 function alias(index: number): string {
   return `e${index + 1}`;
 }
@@ -24,8 +29,7 @@ function alias(index: number): string {
 export function evidenceLines(evidence: ModelEvidence[]): string {
   return evidence
     .map(
-      (item, index) =>
-        `- id=${alias(index)} offsetMs=${item.startMs} text=${item.text.replaceAll("\n", " ")}`,
+      (item, index) => `- id=${alias(index)} offsetMs=${item.startMs} text=${oneLine(item.text)}`,
     )
     .join("\n");
 }
@@ -38,5 +42,48 @@ export function evidenceResolver(evidence: ModelEvidence[]): (value: string) => 
     const cleaned = value.trim().replace(/^id=/i, "");
     if (ids.has(cleaned)) return cleaned;
     return byAlias.get(/^\d+$/.test(cleaned) ? `e${cleaned}` : cleaned.toLowerCase());
+  };
+}
+
+function activityAlias(index: number): string {
+  return `a${index + 1}`;
+}
+
+/**
+ * The evidence lines, preceded by the activities of earlier batches when there are any: the
+ * model continues one by reusing its `aN` id instead of inventing a new activity.
+ */
+export function userPrompt(
+  evidence: ModelEvidence[],
+  known: readonly KnownActivity[] = [],
+): string {
+  if (known.length === 0) return evidenceLines(evidence);
+  const activities = known.map((activity, index) =>
+    [
+      `- episodeId=${activityAlias(index)}`,
+      `activityType=${oneLine(activity.activityType)}`,
+      ...(activity.label ? [`label=${oneLine(activity.label)}`] : []),
+    ].join(" "),
+  );
+  return [
+    "Activities already found earlier in this session. When evidence continues one of them,",
+    "put it in an episode with that same episodeId (a1, a2, ...); new activities get new ids.",
+    ...activities,
+    "Evidence:",
+    evidenceLines(evidence),
+  ].join("\n");
+}
+
+/** Maps `a2`, `A2` or a full id back to an activity of an earlier batch. */
+export function activityResolver(
+  known: readonly KnownActivity[],
+): (value: string) => string | undefined {
+  const ids = new Set(known.map((activity) => activity.episodeId));
+  const byAlias = new Map(
+    known.map((activity, index) => [activityAlias(index), activity.episodeId]),
+  );
+  return (value) => {
+    const cleaned = value.trim().replace(/^episodeId=/i, "");
+    return ids.has(cleaned) ? cleaned : byAlias.get(cleaned.toLowerCase());
   };
 }

@@ -1,5 +1,6 @@
 import type { SessionDetail, SessionEpisode, SessionListItem } from "@octo/contracts";
 import { listOpenQuestions, OPEN_QUESTION_SQL } from "../analysis/questions.js";
+import { latestRun } from "../analysis/runs.js";
 import { OctoError } from "../errors.js";
 import type { Sql } from "../storage/db.js";
 import { sessionDurationMs } from "./clock.js";
@@ -60,16 +61,17 @@ export function sessionDetail(db: Sql, sessionId: string): SessionDetail {
        ORDER BY MIN(i.start_ms) IS NULL, MIN(i.start_ms), e.id`,
     )
     .all(sessionId) as SessionEpisode[];
-  const run = db
+  const run = latestRun(db, sessionId);
+  const { evidenceCount } = db
     .prepare(
-      `SELECT outcome, model, json_extract(evidence_json, '$.error') AS error FROM analysis_runs
-       WHERE session_id = ? ORDER BY rowid DESC LIMIT 1`,
+      "SELECT COUNT(*) AS evidenceCount FROM evidence WHERE session_id = ? AND availability = 'valid'",
     )
-    .get(sessionId) as { outcome: string; model: string; error: string | null } | undefined;
+    .get(sessionId) as { evidenceCount: number };
   return {
     session: toItem(db, row),
     episodes: episodes.map((episode) => ({ ...episode })),
     questions: listOpenQuestions(db, { sessionId }),
     lastRun: run ? { ...run } : null,
+    evidenceCount,
   };
 }

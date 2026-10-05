@@ -7,6 +7,7 @@ export type Sql = DatabaseSync;
 const MIGRATIONS = [
   ["001", "001_init.sql"],
   ["002", "002_episode_labels.sql"],
+  ["003", "003_evidence_approval.sql"],
 ] as const;
 
 function migrationSql(file: string): string {

@@ -6,7 +6,21 @@ import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { app } from "electron";
 
-export type EngineReply = { ok: boolean; result?: unknown; error?: { message: string } };
+export type EngineReply = {
+  ok: boolean;
+  result?: unknown;
+  error?: { code?: string; message: string };
+};
+
+/** An error the engine answered with; `code` lets the dashboard explain it in Italian. */
+export class EngineError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 export type EngineRequest = (
   command: Record<string, unknown>,
@@ -66,8 +80,11 @@ export function createEngineClient(
       }, timeoutMs);
       pending.set(id, (reply) => {
         clearTimeout(timer);
-        if (!reply.ok) reject(new Error(reply.error?.message ?? "engine error"));
-        else resolve(reply);
+        if (reply.ok) {
+          resolve(reply);
+          return;
+        }
+        reject(new EngineError(reply.error?.code ?? "internal", reply.error?.message ?? "error"));
       });
     });
   };

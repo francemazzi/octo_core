@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createOpenRouterAdapter, OPENROUTER_URL } from "./openrouter.js";
+import { createOpenRouterAdapter, OPENROUTER_BASE_URL } from "./openrouter.js";
 
 type Captured = { url: string; headers: Record<string, string>; body: Record<string, unknown> };
 
@@ -46,7 +46,7 @@ describe("OpenRouter adapter", () => {
     const reply = await adapter.interpret(evidence);
 
     expect(captured).toHaveLength(1);
-    expect(captured[0]?.url).toBe(OPENROUTER_URL);
+    expect(captured[0]?.url).toBe(`${OPENROUTER_BASE_URL}/chat/completions`);
     expect(captured[0]?.headers.authorization).toBe("Bearer test-key");
     expect(captured[0]?.body).toMatchObject({
       model: "vendor/model",
@@ -78,5 +78,18 @@ describe("OpenRouter adapter", () => {
       fetchImpl: stub({ error: "no credits" }, captured, 402),
     });
     await expect(refused.interpret(evidence)).rejects.toThrow("openrouter 402");
+
+    const busy = createOpenRouterAdapter({
+      apiKey: "test-key",
+      fetchImpl: stub({ error: "overloaded" }, captured, 503),
+    });
+    await expect(busy.interpret(evidence)).rejects.toMatchObject({ code: "remote_unreachable" });
+    const dropped = createOpenRouterAdapter({
+      apiKey: "test-key",
+      fetchImpl: () => Promise.reject(new TypeError("terminated")),
+    });
+    await expect(dropped.interpret(evidence)).rejects.toMatchObject({
+      code: "remote_unreachable",
+    });
   });
 });

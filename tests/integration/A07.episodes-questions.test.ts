@@ -132,7 +132,7 @@ describe("A07 episodes and questions", () => {
       expect(run).toEqual({
         model: "qwen2.5:7b-instruct-q4_K_M",
         provider: "ollama",
-        prompt_schema: "episodes@4",
+        prompt_schema: "episodes@5",
         outcome: "accepted",
       });
 

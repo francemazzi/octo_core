@@ -18,10 +18,16 @@ export function evidenceIdsForMode(
   return inSession.map((item) => item.id);
 }
 
+/**
+ * Accepts a model reply only when every evidence it cites was sent, no evidence sits in two
+ * episodes, no duration exceeds the session, and questions concern a proposed episode (or one
+ * found in an earlier batch of the same analysis, listed in `priorEpisodeIds`).
+ */
 export function acceptModelOutput(
   raw: unknown,
   knownEvidence: ReadonlySet<string>,
   sessionDurationMs: number,
+  priorEpisodeIds: ReadonlySet<string> = new Set(),
 ): ModelOutput {
   const parsed = modelOutputSchema.safeParse(raw);
   if (!parsed.success) {
@@ -43,7 +49,7 @@ export function acceptModelOutput(
   }
   const episodeIds = new Set(parsed.data.episodes.map((episode) => episode.episodeId));
   for (const question of parsed.data.questions ?? []) {
-    if (!episodeIds.has(question.episodeId)) {
+    if (!episodeIds.has(question.episodeId) && !priorEpisodeIds.has(question.episodeId)) {
       throw new OctoError("unknown_episode", question.episodeId);
     }
     for (const evidenceId of question.evidenceIds) assertKnown(knownEvidence, evidenceId);

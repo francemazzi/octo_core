@@ -32,13 +32,14 @@ describe("database migrations", () => {
     expect(reopened.prepare("SELECT id FROM schema_migrations ORDER BY id").all()).toEqual([
       { id: "001" },
       { id: "002" },
+      { id: "003" },
     ]);
-    const columns = reopened.prepare("PRAGMA table_info(episodes)").all() as Array<{
-      name: string;
-    }>;
-    expect(columns.map((column) => column.name)).toEqual(
-      expect.arrayContaining(["label", "summary"]),
-    );
+    const columns = (table: string) =>
+      (reopened.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(
+        (column) => column.name,
+      );
+    expect(columns("episodes")).toEqual(expect.arrayContaining(["label", "summary"]));
+    expect(columns("evidence")).toEqual(expect.arrayContaining(["approved_at", "approved_by"]));
     reopened.close();
   });
 });

@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -7,6 +9,7 @@ import { createEngine } from "@octo/engine";
 import { _electron as electron, type ElectronApplication, type Page } from "playwright";
 import { describe, expect, it } from "vitest";
 import { startDemo } from "../helpers/engine.js";
+import { promptAliases } from "../helpers/model-network.js";
 
 /** On a fresh machine `require("electron")` first prints a download notice; the path is last. */
 function electronBinary(): string {
@@ -17,7 +20,7 @@ function electronBinary(): string {
   return output.trim().split("\n").at(-1) ?? output;
 }
 
-function launch(dataDir: string): Promise<ElectronApplication> {
+function launch(dataDir: string, env: NodeJS.ProcessEnv = {}): Promise<ElectronApplication> {
   return electron.launch({
     executablePath: electronBinary(),
     args: [join(process.cwd(), "apps/desktop")],
@@ -27,8 +30,59 @@ function launch(dataDir: string): Promise<ElectronApplication> {
       OCTO_CAPTURE: "synthetic",
       OCTO_MODEL: "off",
       OCTO_REPO_ROOT: process.cwd(),
+      ...env,
     },
   });
+}
+
+type Received = { path: string; authorization: string | undefined; body: string };
+
+/** OpenRouter on this computer: `/key` accepts any key, chat groups every evidence in one activity. */
+async function fakeOpenRouter() {
+  const received: Received[] = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk: Buffer) => {
+      body += chunk.toString("utf8");
+    });
+    request.on("end", () => {
+      const path = request.url ?? "";
+      received.push({ path, authorization: request.headers.authorization, body });
+      response.setHeader("content-type", "application/json");
+      if (path.endsWith("/key")) {
+        response.end(JSON.stringify({ data: { label: "test" } }));
+        return;
+      }
+      const messages = (JSON.parse(body) as { messages?: Array<{ role: string; content: string }> })
+        .messages;
+      const prompt = messages?.find((message) => message.role === "user")?.content ?? "";
+      const reply = {
+        title: "Sessione di prova",
+        episodes: [
+          {
+            episodeId: "lavoro",
+            activityType: "order_entry",
+            label: "Lavoro di prova",
+            evidenceIds: promptAliases(prompt),
+          },
+        ],
+        questions: [],
+      };
+      response.end(
+        JSON.stringify({
+          model: "fake/model",
+          choices: [{ message: { content: JSON.stringify(reply) } }],
+        }),
+      );
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}/api/v1`,
+    received,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
 }
 
 async function mascotPage(app: ElectronApplication): Promise<Page> {
@@ -139,4 +193,96 @@ describe("A10 desktop shell", () => {
     expect(session.analysis_state).toBe("completed");
     expect(answers).toEqual([{ text: "Sì, stesso ordine", status: "accepted" }]);
   }, 180_000);
+
+  it("keeps the OpenRouter key in the keystore and sends a session only after confirmation", async () => {
+    const KEY = "octo-test-key-abcd";
+    const ENV_KEY = "octo-env-key-0000";
+    const openrouter = await fakeOpenRouter();
+    const dataDir = mkdtempSync(join(tmpdir(), "octo-a10-remote-"));
+    const env = { OPENROUTER_API_KEY: ENV_KEY, OCTO_OPENROUTER_URL: openrouter.url };
+    let secure = false;
+    try {
+      let app = await launch(dataDir, env);
+      let page = await app.firstWindow();
+      const active = page.getByRole("region", { name: "Sessione attiva" });
+      await active.getByText("Nessuna sessione attiva").waitFor();
+      await active.getByRole("checkbox", { name: "Schermo 1" }).check();
+      await active.getByRole("button", { name: "Avvia", exact: true }).click();
+      // The synthetic frame is taken at 1 s: the session must last longer for it to count.
+      await active.getByRole("button", { name: "Pausa", exact: true }).waitFor();
+      await page.waitForTimeout(2_500);
+      await active.getByRole("button", { name: "Stop", exact: true }).click();
+      await active.getByText("Nessuna sessione attiva").waitFor();
+
+      secure = await app.evaluate(
+        ({ safeStorage }) =>
+          safeStorage.isEncryptionAvailable() &&
+          (process.platform !== "linux" ||
+            safeStorage.getSelectedStorageBackend() !== "basic_text"),
+      );
+      await page.getByRole("button", { name: "Impostazioni" }).click();
+      const settings = page.getByRole("region", { name: "Impostazioni" });
+      await settings.getByLabel("Chiave API OpenRouter").fill(KEY);
+      const save = settings.getByRole("button", { name: "Salva" });
+      if (secure) {
+        await save.click();
+        await settings.getByText("Chiave configurata (…abcd)").waitFor();
+        expect(readFileSync(join(dataDir, "settings.json"), "utf8")).not.toContain(KEY);
+      } else {
+        await settings.getByRole("alert").waitFor();
+        expect(await save.isDisabled()).toBe(true);
+        expect(existsSync(join(dataDir, "settings.json"))).toBe(false);
+      }
+      await settings.getByRole("button", { name: "Chiudi" }).click();
+
+      const detail = page.getByRole("article", { name: "Dettaglio sessione" });
+      await detail.getByRole("button", { name: "Analizza con OpenRouter" }).click();
+      const confirm = detail.getByRole("region", { name: "Conferma invio a OpenRouter" });
+      await confirm.getByText("testo letto da 1 schermata", { exact: false }).waitFor();
+      expect(openrouter.received.some((call) => call.path.endsWith("/chat/completions"))).toBe(
+        false,
+      );
+      await confirm.getByRole("button", { name: "Invia" }).click();
+      await page.getByText("Attività riconosciute: 1.", { exact: false }).waitFor();
+      await detail.getByText("Lavoro di prova").waitFor();
+
+      if (secure) {
+        await app.close();
+        app = await launch(dataDir, env);
+        page = await app.firstWindow();
+        await page.getByRole("button", { name: "Impostazioni" }).click();
+        const reopened = page.getByRole("region", { name: "Impostazioni" });
+        await reopened.getByText("Chiave configurata (…abcd)").waitFor();
+        await reopened.getByRole("button", { name: "Rimuovi" }).click();
+        await reopened.getByText("Nessuna chiave configurata.").waitFor();
+        expect(readFileSync(join(dataDir, "settings.json"), "utf8")).not.toContain("keyCiphertext");
+      }
+      await app.close();
+    } finally {
+      await openrouter.close();
+    }
+
+    const db = new DatabaseSync(join(dataDir, "octo.db"));
+    const approvals = db
+      .prepare("SELECT approved_by, approved_at IS NOT NULL AS dated FROM evidence")
+      .all();
+    const runs = db.prepare("SELECT provider, data_mode, outcome FROM analysis_runs").all();
+    const network = db
+      .prepare("SELECT COUNT(*) AS count FROM audit_events WHERE action = 'network'")
+      .get();
+    const stored = JSON.stringify(db.prepare("SELECT * FROM audit_events").all());
+    db.close();
+    expect(approvals).toEqual([{ approved_by: "operator:op-demo", dated: 1 }]);
+    expect(runs).toEqual([
+      { provider: "openrouter", data_mode: "cloud_after_review", outcome: "accepted" },
+    ]);
+    expect(network).toEqual({ count: 1 });
+    expect(stored).not.toContain(KEY);
+    const chats = openrouter.received.filter((call) => call.path.endsWith("/chat/completions"));
+    expect(chats).toHaveLength(1);
+    expect(chats[0]?.authorization).toBe(`Bearer ${secure ? KEY : ENV_KEY}`);
+    expect(chats[0]?.body).toContain("schermo");
+    const keyChecks = openrouter.received.filter((call) => call.path.endsWith("/key"));
+    expect(keyChecks).toHaveLength(secure ? 1 : 0);
+  }, 240_000);
 });

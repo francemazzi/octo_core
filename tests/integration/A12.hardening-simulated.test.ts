@@ -107,6 +107,7 @@ describe("A12 simulated hardening", () => {
     expect(bundled.prepare("SELECT id FROM schema_migrations ORDER BY id").all()).toEqual([
       { id: "001" },
       { id: "002" },
+      { id: "003" },
     ]);
     bundled.close();
   }, 120_000);

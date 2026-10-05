@@ -1,4 +1,4 @@
-import type { SessionDetail } from "@octo/contracts";
+import { ANALYSIS_TIMEOUT_MS, type SessionDetail } from "@octo/contracts";
 import { initialUiState, type Pending, type UiSource, type UiState } from "../shared/ui-state.js";
 import type { EngineRequest } from "./engine-client.js";
 import { analysisNote, describeError, PERMISSION_NOTE } from "./notes.js";
@@ -7,7 +7,8 @@ import type { ScreenCapture } from "./screen-capture.js";
 import { fetchDetail, fetchSessions } from "./sessions.js";
 import { syntheticFrames } from "./synthetic.js";
 
-const ANALYSIS_TIMEOUT_MS = 600_000;
+/** The desktop asks the local model by default; the remote one only on request, per session. */
+export type AnalysisMode = "local_only" | "cloud_after_review";
 
 export type ControlDeps = {
   request: EngineRequest;
@@ -57,16 +58,26 @@ export function createSessionControl(deps: ControlDeps) {
     return state;
   }
 
-  async function analyse(sessionId: string): Promise<void> {
-    if (state.analyzingSessionId) return;
+  /**
+   * One analysis at a time. The remote one first approves the evidence of the session, which
+   * `cloud_after_review` is the only mode allowed to send.
+   */
+  async function analyse(sessionId: string, mode: AnalysisMode = "local_only"): Promise<void> {
+    if (state.analyzingSessionId) {
+      state.error = "Un'altra analisi è in corso: riprova quando finisce.";
+      publish();
+      return;
+    }
     state.analyzingSessionId = sessionId;
-    state.note = "Analisi in corso…";
+    state.error = null;
+    state.note = mode === "local_only" ? "Analisi in corso…" : "Analisi con OpenRouter in corso…";
     publish();
     try {
-      const run = { cmd: "analysis.run", mode: "local_only", sessionId };
+      if (mode === "cloud_after_review") await deps.request({ cmd: "review.approve", sessionId });
+      const run = { cmd: "analysis.run", mode, sessionId };
       const reply = await deps.request(run, ANALYSIS_TIMEOUT_MS);
       const report = await deps.request({ cmd: "report.tick" }, 30_000);
-      state.note = analysisNote(reply.result, report.result);
+      state.note = analysisNote(reply.result, report.result, mode);
     } catch (error) {
       state.note = "";
       state.error = describeError("Analisi non riuscita", error);
@@ -173,6 +184,10 @@ export function createSessionControl(deps: ControlDeps) {
       }),
     analyze(payload: unknown): UiState {
       void analyse(parseId(payload, "sessione"));
+      return state;
+    },
+    analyzeRemote(payload: unknown): UiState {
+      void analyse(parseId(payload, "sessione"), "cloud_after_review");
       return state;
     },
     async answer(payload: unknown): Promise<UiState> {

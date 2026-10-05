@@ -41,8 +41,16 @@ export const sessionDetailResultSchema = z.object({
   episodes: z.array(sessionEpisodeSchema),
   questions: z.array(sessionQuestionSchema),
   lastRun: z
-    .object({ outcome: z.string(), model: z.string(), error: z.string().nullable() })
+    .object({
+      outcome: z.string(),
+      model: z.string(),
+      provider: z.string(),
+      error: z.string().nullable(),
+      partial: z.boolean(),
+    })
     .nullable(),
+  /** Valid evidence of the session: what a remote analysis would send, as text. */
+  evidenceCount: z.number().int().nonnegative(),
 });
 
 export type SessionListItem = z.infer<typeof sessionListItemSchema>;

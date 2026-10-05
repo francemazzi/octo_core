@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AnswerInput, OctoBridge, UiState } from "../shared/ui-state.js";
+import type { AnswerInput, OctoBridge, OpenRouterInput, UiState } from "../shared/ui-state.js";
 
 const api: OctoBridge = {
   getState: () => ipcRenderer.invoke("octo:getState"),
@@ -13,6 +13,9 @@ const api: OctoBridge = {
   sessionDetail: (sessionId: string) => ipcRenderer.invoke("octo:sessionDetail", sessionId),
   openMain: (sessionId: string | null) => ipcRenderer.invoke("octo:openMain", sessionId),
   mascotPointer: (inside: boolean) => ipcRenderer.invoke("octo:mascotPointer", inside),
+  saveOpenRouter: (input: OpenRouterInput) => ipcRenderer.invoke("octo:saveOpenRouter", input),
+  removeOpenRouter: () => ipcRenderer.invoke("octo:removeOpenRouter"),
+  analyzeRemote: (sessionId: string) => ipcRenderer.invoke("octo:analyzeRemote", sessionId),
   onState: (callback: (state: UiState) => void) => {
     const listener = (_event: unknown, state: UiState) => callback(state);
     ipcRenderer.on("octo:state", listener);

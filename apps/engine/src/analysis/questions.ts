@@ -93,6 +93,13 @@ export function answerQuestion(
   return { status };
 }
 
+/** A new analysis asking the very question it superseded opens it again. */
+export function reopenQuestion(db: Sql, questionId: string): void {
+  db.prepare(
+    "UPDATE questions SET status = 'open', version = version + 1 WHERE id = ? AND status = 'superseded'",
+  ).run(questionId);
+}
+
 /** Deferring postpones an open question: it stays answerable and the graph keeps waiting. */
 export function deferQuestion(db: Sql, questionId: string): void {
   const row = db.prepare("SELECT id FROM questions WHERE id = ?").get(questionId) as

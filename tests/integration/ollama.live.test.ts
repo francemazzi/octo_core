@@ -8,11 +8,11 @@ import { startDemo } from "../helpers/engine.js";
 describe("live Ollama", () => {
   it("extracts episodes from the local model and writes the mini report when it is due", async () => {
     const previousModel = process.env.OCTO_MODEL;
-    const previousName = process.env.OCTO_OLLAMA_MODEL;
     delete process.env.OCTO_MODEL;
-    process.env.OCTO_OLLAMA_MODEL = "qwen2.5:7b-instruct-q4_K_M";
     const dir = mkdtempSync(join(tmpdir(), "octo-live-"));
-    const engine = createEngine(dir, { analysis: ollamaProfile() });
+    const engine = createEngine(dir, {
+      analysis: ollamaProfile({ requested: "qwen2.5:7b-instruct-q4_K_M" }),
+    });
     try {
       startDemo(engine);
       engine.ingestFrame({
@@ -75,8 +75,6 @@ describe("live Ollama", () => {
       engine.close();
       if (previousModel === undefined) delete process.env.OCTO_MODEL;
       else process.env.OCTO_MODEL = previousModel;
-      if (previousName === undefined) delete process.env.OCTO_OLLAMA_MODEL;
-      else process.env.OCTO_OLLAMA_MODEL = previousName;
     }
   });
 });

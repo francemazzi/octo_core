@@ -4,10 +4,19 @@ export {
   economicsInputSchema,
   economicsOracleSchema,
   engineCommandSchema,
+  remoteModelConfigSchema,
+  remoteModelStatusSchema,
   sessionOracleSchema,
   stretchSchema,
   timeIntervalSchema,
 } from "./oracle.js";
+
+export {
+  ANALYSIS_TIMEOUT_MS,
+  MAX_ANALYSIS_BATCHES,
+  MAX_BATCH_EVIDENCE,
+  MODEL_CALL_TIMEOUT_MS,
+} from "./limits.js";
 
 export {
   MAX_EPISODE_LABEL_CHARS,
@@ -38,5 +47,7 @@ export type {
   EconomicsOracle,
   EngineCommand,
   OracleStretch,
+  RemoteModelConfig,
+  RemoteModelStatus,
   SessionOracle,
 } from "./oracle.js";

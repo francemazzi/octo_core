@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { frameTimeline, type ModelAdapter } from "../analysis/model-adapter.js";
 import { createEngine } from "../create-engine.js";
+import { OctoError } from "../errors.js";
 import { createProtocolHandler } from "./serve.js";
 
 type Reply = {
@@ -94,6 +95,51 @@ describe("protocol handler", () => {
         session_id: string;
       }>;
       expect(analysed).toEqual([{ session_id: first }]);
+    } finally {
+      engine.close();
+    }
+  });
+
+  it("checks a key off the command line, never repeats it, and survives a null line", async () => {
+    const KEY = "octo-test-key-abcd";
+    const verification = deferred<void>();
+    const engine = createEngine(mkdtempSync(join(tmpdir(), "octo-serve-key-")), {
+      remoteModels: {
+        create: () => waitingModel(Promise.resolve()),
+        verify: (config) =>
+          config.apiKey === KEY
+            ? verification.promise
+            : Promise.reject(new OctoError("invalid_key", "OpenRouter refused the key")),
+      },
+    });
+    const replies: Reply[] = [];
+    const handler = createProtocolHandler(engine, (message) => replies.push(message as Reply));
+    const send = (id: string, command: Record<string, unknown>) =>
+      handler.handle(JSON.stringify({ v: 1, id, ...command }));
+    const reply = (id: string) => replies.find((item) => item.id === id);
+    const remote = (apiKey: string) => ({ provider: "openrouter", apiKey });
+    try {
+      await handler.handle("null");
+      await send("bad", { cmd: "model.configure", verify: true, remote: remote(`${KEY}-zz`) });
+      await send("save", { cmd: "model.configure", verify: true, remote: remote(KEY) });
+      await send("state", { cmd: "session.state" });
+      expect(reply("state")).toBeDefined();
+      expect(reply("save")).toBeUndefined();
+      verification.resolve();
+      await new Promise((done) => setTimeout(done, 0));
+      expect(reply("save")).toMatchObject({
+        ok: true,
+        result: { remote: { provider: "stub", source: "settings" } },
+      });
+      expect(reply("bad")).toMatchObject({ ok: false, error: { code: "invalid_key" } });
+      await send("short", { cmd: "model.configure", verify: false, remote: remote("short") });
+      expect(reply("short")).toMatchObject({ ok: false, error: { code: "invalid_payload" } });
+      expect(JSON.stringify(replies)).not.toContain(KEY);
+      const audits = engine.db
+        .prepare("SELECT detail_json FROM audit_events WHERE action = 'model_configured'")
+        .all();
+      expect(audits).toHaveLength(1);
+      expect(JSON.stringify(audits)).not.toContain(KEY);
     } finally {
       engine.close();
     }

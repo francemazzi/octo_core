@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { OctoError } from "../errors.js";
-import { createOllamaAdapter, ollamaProfile, probeOllama } from "./ollama.js";
+import {
+  chooseChatModel,
+  createOllamaAdapter,
+  isRemoteOllamaModel,
+  ollamaProfile,
+  probeOllama,
+  type OllamaTag,
+} from "./ollama.js";
 
 const BASE = "http://127.0.0.1:11434";
 
@@ -32,17 +39,58 @@ describe("local Ollama boundary", () => {
           { name: "qwen2.5:7b-instruct-q4_K_M", capabilities: ["completion"] },
         ],
       })) as typeof fetch;
-    const previous = process.env.OCTO_OLLAMA_MODEL;
-    delete process.env.OCTO_OLLAMA_MODEL;
-    try {
-      await expect(probeOllama(fetchImpl, BASE)).resolves.toEqual({
-        up: true,
-        model: "qwen2.5:7b-instruct-q4_K_M",
-      });
-    } finally {
-      if (previous === undefined) delete process.env.OCTO_OLLAMA_MODEL;
-      else process.env.OCTO_OLLAMA_MODEL = previous;
-    }
+    await expect(probeOllama(fetchImpl, BASE)).resolves.toEqual({
+      up: true,
+      model: "qwen2.5:7b-instruct-q4_K_M",
+    });
+  });
+
+  it("never picks a cloud model, even when it is requested or the only one", () => {
+    const tags: OllamaTag[] = [
+      { name: "gpt-oss:120b-cloud" },
+      { name: "glm-4.6:cloud" },
+      { name: "kimi-k2:1t", remote_host: "https://ollama.com:443", remote_model: "kimi-k2:1t" },
+      { name: "llama3.1:8b" },
+    ];
+    expect(isRemoteOllamaModel({ name: "gpt-oss:120b-cloud" })).toBe(true);
+    expect(isRemoteOllamaModel({ name: "glm-4.6:cloud" })).toBe(true);
+    expect(isRemoteOllamaModel({ name: "llama3.1:8b" })).toBe(false);
+    expect(chooseChatModel(tags, { requested: "gpt-oss:120b-cloud" })).toBe("llama3.1:8b");
+    expect(chooseChatModel(tags.slice(0, 3))).toBeNull();
+  });
+
+  it("skips models that read images, the OCR model and excluded names", () => {
+    const tags: OllamaTag[] = [
+      { name: "glm-ocr:latest" },
+      { name: "llava:latest" },
+      { name: "custom-vision:7b" },
+      { name: "deepseek-coder:6.7b" },
+    ];
+    expect(chooseChatModel(tags, { exclude: ["custom-vision:7b"] })).toBe("deepseek-coder:6.7b");
+    expect(chooseChatModel(tags.slice(0, 2))).toBeNull();
+  });
+
+  it("uses the requested local model and refuses to analyse with cloud models only", async () => {
+    const calls: string[] = [];
+    const tagsOnly = (async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      return json({ models: [{ name: "gpt-oss:120b-cloud" }, { name: "qwen3:8b" }] });
+    }) as typeof fetch;
+    await expect(probeOllama(tagsOnly, BASE, { requested: "qwen3:8b" })).resolves.toEqual({
+      up: true,
+      model: "qwen3:8b",
+    });
+    const cloudOnly = createOllamaAdapter({
+      base: BASE,
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        calls.push(String(input));
+        return json({ models: [{ name: "gpt-oss:120b-cloud" }] });
+      }) as typeof fetch,
+    });
+    await expect(
+      cloudOnly.interpret([{ id: "ev-a", sourceId: "mon-1", startMs: 0, text: "x" }]),
+    ).rejects.toMatchObject({ code: "model_unavailable" });
+    expect(calls.some((url) => url.endsWith("/api/chat"))).toBe(false);
   });
 
   it("reports Ollama down when the probe fails", async () => {

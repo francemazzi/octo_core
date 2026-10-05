@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ActiveSession } from "./ActiveSession.js";
 import { SessionDetail } from "./SessionDetail.js";
 import { SessionSidebar } from "./SessionSidebar.js";
+import { Settings } from "./Settings.js";
 import { defaultSelection } from "./session-format.js";
 import { useOctoState } from "./useOcto.js";
 
@@ -9,10 +10,14 @@ import { useOctoState } from "./useOcto.js";
 export function Dashboard() {
   const state = useOctoState();
   const [selected, setSelected] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const focusAt = state.focus?.at;
 
   useEffect(() => {
-    if (state.focus?.sessionId) setSelected(state.focus.sessionId);
+    if (state.focus?.sessionId) {
+      setSelected(state.focus.sessionId);
+      setSettingsOpen(false);
+    }
     // Only a new focus request moves the selection, not every state update.
   }, [focusAt]);
 
@@ -28,7 +33,11 @@ export function Dashboard() {
         sessions={state.sessions}
         selectedId={selectedId}
         analyzingSessionId={state.analyzingSessionId}
-        onSelect={setSelected}
+        onSelect={(sessionId) => {
+          setSelected(sessionId);
+          setSettingsOpen(false);
+        }}
+        onSettings={() => setSettingsOpen(true)}
       />
       <main className="content">
         <ActiveSession state={state} />
@@ -38,8 +47,15 @@ export function Dashboard() {
           </p>
         ) : null}
         {state.note ? <p className="note">{state.note}</p> : null}
-        {item ? (
-          <SessionDetail item={item} analyzing={state.analyzingSessionId === item.sessionId} />
+        {settingsOpen ? (
+          <Settings remote={state.remote} onClose={() => setSettingsOpen(false)} />
+        ) : item ? (
+          <SessionDetail
+            item={item}
+            analyzing={state.analyzingSessionId === item.sessionId}
+            busy={state.analyzingSessionId !== null}
+            remoteAvailable={state.remote.available}
+          />
         ) : (
           <p className="muted">Scegli uno schermo e avvia la prima sessione.</p>
         )}

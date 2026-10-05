@@ -1,6 +1,7 @@
 import type { SessionDetail as Detail, SessionListItem } from "@octo/contracts";
 import { useEffect, useState } from "react";
 import { QuestionsPanel } from "./QuestionsPanel.js";
+import { RemoteAnalysis } from "./RemoteAnalysis.js";
 import {
   dayLabel,
   episodeLabel,
@@ -10,7 +11,13 @@ import {
 } from "./session-format.js";
 import { useAction } from "./useOcto.js";
 
-type Props = { item: SessionListItem; analyzing: boolean };
+type Props = {
+  item: SessionListItem;
+  analyzing: boolean;
+  /** Another session is being analysed: one analysis at a time. */
+  busy: boolean;
+  remoteAvailable: boolean;
+};
 
 /** Refetched whenever the list shows a change for this session (state, activities, questions). */
 function versionOf(item: SessionListItem): string {
@@ -24,7 +31,7 @@ function versionOf(item: SessionListItem): string {
   ].join("|");
 }
 
-export function SessionDetail({ item, analyzing }: Props) {
+export function SessionDetail({ item, analyzing, busy, remoteAvailable }: Props) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const { run, error } = useAction();
   const version = versionOf(item);
@@ -48,7 +55,8 @@ export function SessionDetail({ item, analyzing }: Props) {
   const episodes = detail?.session.sessionId === item.sessionId ? detail.episodes : [];
   const questions = detail?.session.sessionId === item.sessionId ? detail.questions : [];
   const canAnalyse =
-    !live && !analyzing && (item.analysisState === "idle" || item.analysisState === "pending");
+    !live && !busy && (item.analysisState === "idle" || item.analysisState === "pending");
+  const loaded = detail?.session.sessionId === item.sessionId ? detail : null;
 
   return (
     <article className="detail" aria-label="Dettaglio sessione">
@@ -86,6 +94,14 @@ export function SessionDetail({ item, analyzing }: Props) {
         <button type="button" onClick={() => run(() => window.octo.analyze(item.sessionId))}>
           Analizza
         </button>
+      ) : null}
+      {remoteAvailable && !live && !busy && loaded ? (
+        <RemoteAnalysis sessionId={item.sessionId} evidenceCount={loaded.evidenceCount} />
+      ) : null}
+      {loaded?.lastRun?.partial ? (
+        <p className="muted">
+          Analisi parziale: la sessione è troppo lunga per essere letta tutta.
+        </p>
       ) : null}
       {questions.length > 0 ? <QuestionsPanel questions={questions} /> : null}
       {error ? <p role="alert">{error}</p> : null}

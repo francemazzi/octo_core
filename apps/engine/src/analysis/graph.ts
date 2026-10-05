@@ -7,7 +7,13 @@ import { NodeSqliteSaver } from "./checkpointer.js";
 import { loadFrames, writeEpisodes } from "./episodes.js";
 import { adapterFor, interpretSession, type InterpretDeps } from "./interpret.js";
 import type { DataMode } from "./policy.js";
-import { askProactiveQuestion, findQuestion, questionIdFor, questionLimits } from "./questions.js";
+import {
+  askProactiveQuestion,
+  findQuestion,
+  questionIdFor,
+  questionLimits,
+  reopenQuestion,
+} from "./questions.js";
 
 const GraphState = Annotation.Root({
   sessionId: Annotation<string>,
@@ -84,6 +90,7 @@ function buildSessionGraph(deps: InterpretDeps) {
       // This node runs again on resume: every effect before interrupt() must be idempotent.
       const existing = findQuestion(db, questionId);
       if (existing?.status === "answered") return { stage: "question", questionId };
+      if (existing?.status === "superseded") reopenQuestion(db, questionId);
       if (!existing) {
         const asked = askProactiveQuestion(db, {
           sessionId: state.sessionId,

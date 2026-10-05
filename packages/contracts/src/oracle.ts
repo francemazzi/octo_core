@@ -100,6 +100,40 @@ export type EconomicsOracle = z.infer<typeof economicsOracleSchema>;
 
 export const PROTOCOL_VERSION = 1;
 
+/**
+ * A remote model key set by the operator in the app. It travels only from the desktop main
+ * process to the engine, which never writes it to disk, logs or replies.
+ */
+export const remoteModelConfigSchema = z
+  .object({
+    provider: z.literal("openrouter"),
+    apiKey: z
+      .string()
+      .min(16)
+      .max(256)
+      .regex(/^[\x21-\x7e]+$/),
+    model: z
+      .string()
+      .min(3)
+      .max(120)
+      .regex(/^[\w.:/-]+$/)
+      .optional(),
+  })
+  .strict();
+
+export type RemoteModelConfig = z.infer<typeof remoteModelConfigSchema>;
+
+/** Which remote model the cloud modes use, and where its key came from. */
+export const remoteModelStatusSchema = z
+  .object({
+    provider: z.string(),
+    model: z.string().nullable(),
+    source: z.enum(["settings", "env"]),
+  })
+  .nullable();
+
+export type RemoteModelStatus = z.infer<typeof remoteModelStatusSchema>;
+
 export const engineCommandSchema = z.discriminatedUnion("cmd", [
   z.object({
     v: z.number(),
@@ -205,6 +239,19 @@ export const engineCommandSchema = z.discriminatedUnion("cmd", [
     imageBase64: z.string().min(1).max(16_000_000),
   }),
   z.object({ v: z.number(), id: z.string(), cmd: z.literal("session.delete") }),
+  z.object({
+    v: z.number(),
+    id: z.string(),
+    cmd: z.literal("model.configure"),
+    verify: z.boolean(),
+    remote: remoteModelConfigSchema.nullable(),
+  }),
+  z.object({
+    v: z.number(),
+    id: z.string(),
+    cmd: z.literal("review.approve"),
+    sessionId: z.string().min(1).max(100),
+  }),
 ]);
 
 export type EngineCommand = z.infer<typeof engineCommandSchema>;

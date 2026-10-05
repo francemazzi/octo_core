@@ -4,8 +4,11 @@ import type { UiSource } from "../shared/ui-state.js";
 import { createEngineClient } from "./engine-client.js";
 import { registerIpc } from "./ipc.js";
 import { parseId } from "./questions.js";
+import { createRemoteModel } from "./remote-model.js";
 import { createScreenCapture, orderedDisplays, screenPermission } from "./screen-capture.js";
+import { keystoreBox } from "./secret-box.js";
 import { createSessionControl, type SessionControl } from "./session-control.js";
+import { createSettingsStore } from "./settings-store.js";
 import { createWindows } from "./windows.js";
 
 declare const __dirname: string;
@@ -57,6 +60,14 @@ app.whenReady().then(async () => {
     publish: (state) => windows.broadcast(state),
   });
   control = session;
+  const remote = createRemoteModel({
+    request,
+    store: createSettingsStore(join(dataDir, "settings.json"), keystoreBox()),
+    publish: (state) => {
+      session.state.remote = state;
+      session.publish();
+    },
+  });
   if (process.platform === "darwin") app.dock?.setIcon(windows.logo());
   registerIpc({
     "octo:getState": () => session.state,
@@ -74,6 +85,9 @@ app.whenReady().then(async () => {
     },
     "octo:mascotPointer": (payload, event) =>
       windows.setMascotPointer(event.sender, payload === true),
+    "octo:saveOpenRouter": (payload) => remote.save(payload),
+    "octo:removeOpenRouter": () => remote.remove(),
+    "octo:analyzeRemote": (payload) => session.analyzeRemote(payload),
   });
 
   const dashboard = windows.createDashboard();
@@ -91,6 +105,9 @@ app.whenReady().then(async () => {
   app.on("activate", () => windows.showDashboard());
 
   await request({ cmd: "handshake", clientVersion: 1 });
+  await remote
+    .boot()
+    .catch((error: unknown) => process.stderr.write(`remote model not set: ${String(error)}\n`));
   const note = await modelNote().catch(() => "Ollama spento.");
   await session.boot(note);
 });

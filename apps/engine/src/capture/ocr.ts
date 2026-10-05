@@ -1,4 +1,10 @@
-import { isLoopbackUrl, ollamaBase } from "../analysis/ollama.js";
+import {
+  DEFAULT_OLLAMA_BASE,
+  fetchOllamaTags,
+  isLoopbackUrl,
+  isRemoteOllamaModel,
+  sameOllamaModel,
+} from "../analysis/ollama.js";
 import { OctoError } from "../errors.js";
 
 export const DEFAULT_OCR_MODEL = "glm-ocr";
@@ -22,18 +28,38 @@ export function cleanOcrText(raw: string): string {
     .slice(0, MAX_OCR_CHARS);
 }
 
+/**
+ * The OCR model must be installed and run on this computer: the daemon forwards cloud models to
+ * ollama.com. Checked before the first screenshot leaves the engine, again after a failure.
+ */
+async function assertLocalModel(base: string, model: string, fetchImpl: FetchLike): Promise<void> {
+  const tag = (await fetchOllamaTags(base, fetchImpl)).find(
+    (item) => typeof item.name === "string" && sameOllamaModel(item.name, model),
+  );
+  if (!tag) throw new OctoError("ocr_failed", `${model} is not installed`);
+  if (isRemoteOllamaModel(tag)) {
+    throw new OctoError("remote_model", `${model} runs outside this computer`);
+  }
+}
+
 export function createOllamaOcr(
   options: { base?: string; model?: string; fetchImpl?: FetchLike } = {},
 ): OcrReader {
-  const base = options.base ?? ollamaBase();
+  const base = options.base ?? DEFAULT_OLLAMA_BASE;
   if (!isLoopbackUrl(base)) {
     throw new OctoError("non_loopback_model", "screenshots are read only on this computer");
   }
   const model = options.model ?? DEFAULT_OCR_MODEL;
+  let checked: Promise<void> | null = null;
   return {
     model,
     async read(imageBase64) {
       const fetchImpl = options.fetchImpl ?? fetch;
+      checked ??= assertLocalModel(base, model, fetchImpl).catch((error: unknown) => {
+        checked = null;
+        throw error;
+      });
+      await checked;
       const response = await fetchImpl(`${base}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },

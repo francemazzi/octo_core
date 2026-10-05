@@ -332,6 +332,8 @@ Invarianti obbligatorie:
 - [x] **A06.03 — Schema output.** Rifiuto evidenze inesistenti, durate inventate, fuori sessione.
 - [x] **A06.04 — Tre modalità.** Enforcement rete in `local_only` e scope in `cloud_after_review`.
 - [x] **A06.05 — Prompt injection fixture.** Nessun tool al modello.
+- [x] **A06.06 — Confine locale.** Modelli cloud di Ollama mai usati in `local_only` (analisi e OCR); gate sul cablaggio reale (`modelWiring`).
+- [x] **A06.07 — Risposte e sessioni lunghe.** Id inventati o doppi rifiutati con `issues`; analisi a blocchi con continuazione delle attività e run parziale esplicito.
 - [x] **A06.G — Gate A06.** `pnpm gate A06` verde.
 
 **Test di integrazione:** `tests/integration/A06.model-policy.test.ts` — spy rete: zero chiamate in `local_only`; solo evidenze approved verso mock in `cloud_after_review`; JSON invalido rifiutato; injection non cambia policy/scope.
@@ -399,6 +401,7 @@ Invarianti obbligatorie:
 - [x] **A10.07 — Logo nell'angolo.** Finestra trasparente in alto a destra, Pausa/Riprendi e Stop al passaggio, badge domande.
 - [x] **A10.08 — Sessioni per giorno.** Barra laterale con titolo, attività e riassunti; sessione attiva o avvio.
 - [ ] **A10.09 — Etichette nei report.** Usare nome e riassunto delle attività nel mini report e nel DOCX.
+- [x] **A10.10 — Chiave OpenRouter dall'app.** Impostazioni con chiave in `safeStorage`; "Analizza con OpenRouter" per sessione, con conferma e approvazione registrata.
 - [x] **A10.G — Gate A10.** `pnpm gate A10` verde.
 
 **Test di integrazione:** `tests/integration/A10.desktop-shell.test.ts` — Electron in test (es. Playwright): start → pausa → stop; chiusura app termina sessione; nessun asset con timestamp acquisizione dopo pausa.
