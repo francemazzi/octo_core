@@ -20,3 +20,5 @@ export {
 export { diagnosticGuide } from "./diagnostics/log.js";
 export { OctoError } from "./errors.js";
 export { dispatch, serve } from "./protocol/serve.js";
+
+export { createAnthropicAdapter } from "./analysis/anthropic.js";

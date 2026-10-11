@@ -1,7 +1,11 @@
 {
   "tracks": {
-    "B": { "status": "pending" },
-    "C": { "status": "pending" }
+    "B": {
+      "status": "pending"
+    },
+    "C": {
+      "status": "pending"
+    }
   },
   "phases": {
     "A00": {
@@ -58,7 +62,8 @@
         "apps/engine/src/analysis/reply.unit.test.ts",
         "apps/engine/src/analysis/remote-slot.unit.test.ts",
         "apps/engine/src/protocol/runtime.unit.test.ts",
-        "apps/engine/src/reports/cadence.unit.test.ts"
+        "apps/engine/src/reports/cadence.unit.test.ts",
+        "apps/engine/src/analysis/anthropic.unit.test.ts"
       ],
       "evidenceRequired": true
     },
@@ -91,7 +96,8 @@
       "unit": [
         "apps/desktop/src/main/mascot-layout.unit.test.ts",
         "apps/desktop/src/main/settings-store.unit.test.ts",
-        "apps/desktop/src/renderer/session-format.unit.test.ts"
+        "apps/desktop/src/renderer/session-format.unit.test.ts",
+        "apps/desktop/src/main/remote-model.unit.test.ts"
       ],
       "evidenceRequired": true
     },

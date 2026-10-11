@@ -202,7 +202,7 @@ async function attempt(call: Call): Promise<CallResult> {
       detail: { ...detail, ...extra },
       usage,
     });
-  if (adapter.locality === "remote") auditNetwork(deps, input.sessionId, ids, adapter.provider);
+  if (adapter.locality === "remote") auditNetwork(deps, input.sessionId, ids, adapter);
 
   let reply: ModelReply;
   try {
@@ -256,11 +256,25 @@ function assertNoIssues(reply: ModelReply): void {
 }
 
 /** Written before each remote call: what leaves the computer, and to whom. */
-function auditNetwork(deps: InterpretDeps, sessionId: string, ids: string[], provider: string) {
+function auditNetwork(
+  deps: InterpretDeps,
+  sessionId: string,
+  ids: string[],
+  adapter: ModelAdapter,
+) {
   deps.db
     .prepare(
       `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
        VALUES (?, ?, ?, 'network', ?)`,
     )
-    .run(randomUUID(), sessionId, deps.nowWall(), JSON.stringify({ evidenceIds: ids, provider }));
+    .run(
+      randomUUID(),
+      sessionId,
+      deps.nowWall(),
+      JSON.stringify({
+        evidenceIds: ids,
+        provider: adapter.provider,
+        ...(adapter.workspaceId ? { workspaceId: adapter.workspaceId } : {}),
+      }),
+    );
 }

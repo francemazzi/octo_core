@@ -1,3 +1,5 @@
+import { remoteAnalysisInputSchema } from "@octo/contracts";
+import { providerLabel } from "../shared/ui-state.js";
 import { ANALYSIS_TIMEOUT_MS, type SessionDetail } from "@octo/contracts";
 import { initialUiState, type Pending, type UiSource, type UiState } from "../shared/ui-state.js";
 import type { EngineRequest } from "./engine-client.js";
@@ -70,14 +72,22 @@ export function createSessionControl(deps: ControlDeps) {
     }
     state.analyzingSessionId = sessionId;
     state.error = null;
-    state.note = mode === "local_only" ? "Analisi in corso…" : "Analisi con OpenRouter in corso…";
+    state.note =
+      mode === "local_only"
+        ? "Analisi in corso…"
+        : `Analisi con ${providerLabel(state.remote.provider)} in corso…`;
     publish();
     try {
       if (mode === "cloud_after_review") await deps.request({ cmd: "review.approve", sessionId });
       const run = { cmd: "analysis.run", mode, sessionId };
       const reply = await deps.request(run, ANALYSIS_TIMEOUT_MS);
       const report = await deps.request({ cmd: "report.tick" }, 30_000);
-      state.note = analysisNote(reply.result, report.result, mode);
+      state.note = analysisNote(
+        reply.result,
+        report.result,
+        mode,
+        providerLabel(state.remote.provider),
+      );
     } catch (error) {
       state.note = "";
       state.error = describeError("Analisi non riuscita", error);
@@ -187,7 +197,16 @@ export function createSessionControl(deps: ControlDeps) {
       return state;
     },
     analyzeRemote(payload: unknown): UiState {
-      void analyse(parseId(payload, "sessione"), "cloud_after_review");
+      const input = remoteAnalysisInputSchema.parse(payload);
+      if (
+        !state.remote.available ||
+        input.provider !== state.remote.provider ||
+        input.model !== state.remote.model ||
+        (input.workspaceId ?? null) !== state.remote.workspaceId
+      ) {
+        throw new Error("Il provider o il modello sono cambiati. Conferma nuovamente l’invio.");
+      }
+      void analyse(input.sessionId, "cloud_after_review");
       return state;
     },
     async answer(payload: unknown): Promise<UiState> {

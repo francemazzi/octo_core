@@ -143,3 +143,23 @@ pnpm gate:release    # pilot: Windows, modello live, checklist umane
 ```
 
 **Primo traguardo di prodotto (M1):** ricostruire la sessione della fixture oracolo con poche correzioni, tempi riconciliati con l'unione degli intervalli e un DOCX da cui capire quale problema approfondire — dimostrato dai gate A07–A09, senza dipendere da hardware Windows.
+
+## Provider remoti: OpenRouter e Claude
+
+In **Impostazioni**, scegli OpenRouter oppure **Claude (Anthropic)**, inserisci la relativa API key e premi **Salva**. Le due chiavi restano separate e cifrate con il keystore del sistema; al renderer tornano soltanto le ultime quattro cifre. **Usa come predefinito** seleziona il provider delle prossime analisi. Il salvataggio di un secondo provider non cambia quello attivo.
+
+La configurazione OpenRouter precedente viene migrata automaticamente al formato v2, conservando chiave e modello. Il controllo della chiave Anthropic usa `GET /v1/models`, senza evidenze e senza generazione: non garantisce credito disponibile o accesso al modello richiesto. Il modello predefinito è `claude-sonnet-5-5`, modificabile nel campo Modello.
+
+Prima dell'invio, la sessione mostra provider, modello, quantità di schermate e limite di richieste. Parte soltanto il testo delle evidenze approvate, mai le immagini. La conferma decade se cambia il destinatario; durante l'analisi non si modificano le impostazioni del provider. `local_only` non invia evidenze a servizi remoti. Non esiste fallback automatico tra OpenRouter e Anthropic.
+
+OpenRouter mantiene i vincoli di routing ZDR già previsti. Per Anthropic valgono le condizioni dell'account: Octo non promette conservazione zero. Riferimenti: [Messages API](https://platform.claude.com/docs/en/api/messages/create), [Models API](https://platform.claude.com/docs/en/api/models/list), [conservazione dei dati](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data).
+
+Per avviare il motore tramite ambiente:
+
+- `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_MAX_TOKENS` (default 4000).
+- `ANTHROPIC_WORKSPACE_ID` o il campo **Workspace Anthropic** nelle impostazioni, per chiavi non associate a un workspace. L’ID viene inviato nell’header `anthropic-workspace-id` sia per la verifica sia per l’analisi; cambiarlo richiede una nuova conferma. Le chiavi già associate a un workspace non richiedono il campo.
+- `OCTO_REMOTE_PROVIDER=anthropic` oppure `openrouter`. Senza selezione esplicita, OpenRouter ha precedenza se la sua chiave è presente, altrimenti Anthropic.
+- Le impostazioni salvate hanno precedenza sull'ambiente. Rimuovere la chiave attiva ripristina solo l'eventuale chiave ambiente dello stesso provider; altrimenti l'analisi remota diventa indisponibile.
+- `OCTO_ANTHROPIC_URL` è riservato ai server finti di test e accetta solo loopback.
+
+`pnpm test:anthropic` esegue lo smoke live separato del binario B, con una chiave fornita nell'ambiente e soli dati sintetici. Può generare al massimo due richieste da 800 token di output ciascuna, fatturate dal provider. Non entra nei gate A o nella CI ordinaria; senza chiave resta `pending`.

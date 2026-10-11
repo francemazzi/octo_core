@@ -1,4 +1,10 @@
-import type { SessionDetail, SessionListItem, SessionQuestion } from "@octo/contracts";
+import type {
+  RemoteProvider,
+  RemoteModelConfig,
+  SessionDetail,
+  SessionListItem,
+  SessionQuestion,
+} from "@octo/contracts";
 
 export type Capture = "idle" | "recording" | "paused";
 
@@ -7,18 +13,29 @@ export type Pending = "starting" | "pausing" | "resuming" | "stopping" | null;
 export type UiSource = { id: string; label: string };
 
 /** The remote model as the dashboard sees it: never the key, at most its last characters. */
+export function providerLabel(provider: RemoteProvider | null): string {
+  return provider === "anthropic" ? "Claude (Anthropic)" : "OpenRouter";
+}
 export type UiRemote = {
-  /** A key is saved in the app settings. */
-  configured: boolean;
-  hint: string | null;
+  provider: RemoteProvider | null;
+  workspaceId: string | null;
   model: string | null;
-  /** The engine has a remote model, from the settings or from its environment. */
+  source: "settings" | "env" | null;
+  providers: Record<
+    RemoteProvider,
+    { configured: boolean; hint: string | null; model: string | null; workspaceId?: string }
+  >;
   available: boolean;
-  /** Why a key cannot be saved on this computer, or null. */
   problem: string | null;
 };
+export type RemoteAnalysisInput = {
+  sessionId: string;
+  provider: RemoteProvider;
+  model: string;
+  workspaceId?: string;
+};
 
-export type OpenRouterInput = { apiKey: string; model?: string };
+export type RemoteInput = RemoteModelConfig;
 
 /** Everything the dashboard and the corner mascot render; main owns it and publishes copies. */
 export type UiState = {
@@ -48,7 +65,18 @@ export const initialUiState: UiState = {
   sources: [],
   sessions: [],
   questions: [],
-  remote: { configured: false, hint: null, model: null, available: false, problem: null },
+  remote: {
+    provider: null,
+    workspaceId: null,
+    model: null,
+    source: null,
+    providers: {
+      openrouter: { configured: false, hint: null, model: null },
+      anthropic: { configured: false, hint: null, model: null },
+    },
+    available: false,
+    problem: null,
+  },
   focus: null,
 };
 
@@ -67,8 +95,9 @@ export const OCTO_CHANNELS = [
   "octo:sessionDetail",
   "octo:openMain",
   "octo:mascotPointer",
-  "octo:saveOpenRouter",
-  "octo:removeOpenRouter",
+  "octo:saveRemote",
+  "octo:removeRemote",
+  "octo:selectRemote",
   "octo:analyzeRemote",
 ] as const;
 
@@ -87,9 +116,10 @@ export interface OctoBridge {
   openMain(sessionId: string | null): Promise<void>;
   mascotPointer(inside: boolean): Promise<void>;
   /** Resolves with the reason the key was not saved, or null. */
-  saveOpenRouter(input: OpenRouterInput): Promise<string | null>;
-  removeOpenRouter(): Promise<string | null>;
+  saveRemote(input: RemoteInput): Promise<string | null>;
+  removeRemote(provider: RemoteProvider): Promise<string | null>;
+  selectRemote(provider: RemoteProvider): Promise<string | null>;
   /** Approves the evidence of a stopped session and analyses it with the remote model. */
-  analyzeRemote(sessionId: string): Promise<UiState>;
+  analyzeRemote(input: RemoteAnalysisInput): Promise<UiState>;
   onState(callback: (state: UiState) => void): () => void;
 }

@@ -35,7 +35,12 @@ function launch(dataDir: string, env: NodeJS.ProcessEnv = {}): Promise<ElectronA
   });
 }
 
-type Received = { path: string; authorization: string | undefined; body: string };
+type Received = {
+  path: string;
+  authorization: string | undefined;
+  body: string;
+  workspace?: string;
+};
 
 /** OpenRouter on this computer: `/key` accepts any key, chat groups every evidence in one activity. */
 async function fakeOpenRouter() {
@@ -47,9 +52,15 @@ async function fakeOpenRouter() {
     });
     request.on("end", () => {
       const path = request.url ?? "";
-      received.push({ path, authorization: request.headers.authorization, body });
+      received.push({
+        path,
+        workspace: request.headers["anthropic-workspace-id"] as string | undefined,
+        authorization:
+          request.headers.authorization ?? (request.headers["x-api-key"] as string | undefined),
+        body,
+      });
       response.setHeader("content-type", "application/json");
-      if (path.endsWith("/key")) {
+      if (path.endsWith("/key") || path.includes("/models?")) {
         response.end(JSON.stringify({ data: { label: "test" } }));
         return;
       }
@@ -68,6 +79,17 @@ async function fakeOpenRouter() {
         ],
         questions: [],
       };
+      if (path.endsWith("/messages")) {
+        response.end(
+          JSON.stringify({
+            model: "claude-test",
+            stop_reason: "end_turn",
+            content: [{ type: "text", text: JSON.stringify(reply) }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          }),
+        );
+        return;
+      }
       response.end(
         JSON.stringify({
           model: "fake/model",
@@ -194,95 +216,163 @@ describe("A10 desktop shell", () => {
     expect(answers).toEqual([{ text: "Sì, stesso ordine", status: "accepted" }]);
   }, 180_000);
 
-  it("keeps the OpenRouter key in the keystore and sends a session only after confirmation", async () => {
-    const KEY = "octo-test-key-abcd";
-    const ENV_KEY = "octo-env-key-0000";
-    const openrouter = await fakeOpenRouter();
-    const dataDir = mkdtempSync(join(tmpdir(), "octo-a10-remote-"));
-    const env = { OPENROUTER_API_KEY: ENV_KEY, OCTO_OPENROUTER_URL: openrouter.url };
-    let secure = false;
-    try {
-      let app = await launch(dataDir, env);
-      let page = await app.firstWindow();
-      const active = page.getByRole("region", { name: "Sessione attiva" });
-      await active.getByText("Nessuna sessione attiva").waitFor();
-      await active.getByRole("checkbox", { name: "Schermo 1" }).check();
-      await active.getByRole("button", { name: "Avvia", exact: true }).click();
-      // The synthetic frame is taken at 1 s: the session must last longer for it to count.
-      await active.getByRole("button", { name: "Pausa", exact: true }).waitFor();
-      await page.waitForTimeout(2_500);
-      await active.getByRole("button", { name: "Stop", exact: true }).click();
-      await active.getByText("Nessuna sessione attiva").waitFor();
+  it.each(["openrouter", "anthropic"] as const)(
+    "keeps %s keys in the keystore and sends only after confirmation",
+    async (provider) => {
+      const label = provider === "anthropic" ? "Claude (Anthropic)" : "OpenRouter";
+      const endpoint = provider === "anthropic" ? "/messages" : "/chat/completions";
+      const KEY = "octo-test-key-abcd";
+      const ENV_KEY = "octo-env-key-0000";
+      const openrouter = await fakeOpenRouter();
+      const dataDir = mkdtempSync(join(tmpdir(), "octo-a10-remote-"));
+      const env = {
+        OPENROUTER_API_KEY: ENV_KEY,
+        ANTHROPIC_API_KEY: ENV_KEY,
+        OCTO_REMOTE_PROVIDER: "openrouter",
+        OCTO_OPENROUTER_URL: openrouter.url,
+        OCTO_ANTHROPIC_URL: openrouter.url,
+      };
+      let secure = false;
+      try {
+        let app = await launch(dataDir, env);
+        let page = await app.firstWindow();
+        const active = page.getByRole("region", { name: "Sessione attiva" });
+        await active.getByText("Nessuna sessione attiva").waitFor();
+        await active.getByRole("checkbox", { name: "Schermo 1" }).check();
+        await active.getByRole("button", { name: "Avvia", exact: true }).click();
+        // The synthetic frame is taken at 1 s: the session must last longer for it to count.
+        await active.getByRole("button", { name: "Pausa", exact: true }).waitFor();
+        await page.waitForTimeout(2_500);
+        await active.getByRole("button", { name: "Stop", exact: true }).click();
+        await active.getByText("Nessuna sessione attiva").waitFor();
 
-      secure = await app.evaluate(
-        ({ safeStorage }) =>
-          safeStorage.isEncryptionAvailable() &&
-          (process.platform !== "linux" ||
-            safeStorage.getSelectedStorageBackend() !== "basic_text"),
-      );
-      await page.getByRole("button", { name: "Impostazioni" }).click();
-      const settings = page.getByRole("region", { name: "Impostazioni" });
-      await settings.getByLabel("Chiave API OpenRouter").fill(KEY);
-      const save = settings.getByRole("button", { name: "Salva" });
-      if (secure) {
-        await save.click();
-        await settings.getByText("Chiave configurata (…abcd)").waitFor();
-        expect(readFileSync(join(dataDir, "settings.json"), "utf8")).not.toContain(KEY);
-      } else {
-        await settings.getByRole("alert").waitFor();
-        expect(await save.isDisabled()).toBe(true);
-        expect(existsSync(join(dataDir, "settings.json"))).toBe(false);
-      }
-      await settings.getByRole("button", { name: "Chiudi" }).click();
-
-      const detail = page.getByRole("article", { name: "Dettaglio sessione" });
-      await detail.getByRole("button", { name: "Analizza con OpenRouter" }).click();
-      const confirm = detail.getByRole("region", { name: "Conferma invio a OpenRouter" });
-      await confirm.getByText("testo letto da 1 schermata", { exact: false }).waitFor();
-      expect(openrouter.received.some((call) => call.path.endsWith("/chat/completions"))).toBe(
-        false,
-      );
-      await confirm.getByRole("button", { name: "Invia" }).click();
-      await page.getByText("Attività riconosciute: 1.", { exact: false }).waitFor();
-      await detail.getByText("Lavoro di prova").waitFor();
-
-      if (secure) {
-        await app.close();
-        app = await launch(dataDir, env);
-        page = await app.firstWindow();
+        secure = await app.evaluate(
+          ({ safeStorage }) =>
+            safeStorage.isEncryptionAvailable() &&
+            (process.platform !== "linux" ||
+              safeStorage.getSelectedStorageBackend() !== "basic_text"),
+        );
         await page.getByRole("button", { name: "Impostazioni" }).click();
-        const reopened = page.getByRole("region", { name: "Impostazioni" });
-        await reopened.getByText("Chiave configurata (…abcd)").waitFor();
-        await reopened.getByRole("button", { name: "Rimuovi" }).click();
-        await reopened.getByText("Nessuna chiave configurata.").waitFor();
-        expect(readFileSync(join(dataDir, "settings.json"), "utf8")).not.toContain("keyCiphertext");
-      }
-      await app.close();
-    } finally {
-      await openrouter.close();
-    }
+        const settings = page.getByRole("region", { name: "Impostazioni" });
+        if (provider === "anthropic") {
+          if (secure) {
+            await settings.getByLabel("Chiave API OpenRouter").fill("octo-other-key-zzzz");
+            await settings.getByRole("button", { name: "Salva", exact: true }).click();
+            await settings.getByText("Chiave configurata (…zzzz)").waitFor();
+          }
+          await settings.getByLabel("Provider", { exact: true }).selectOption("anthropic");
+        }
+        await settings.getByLabel(`Chiave API ${label}`).fill(KEY);
+        if (provider === "anthropic")
+          await settings
+            .getByLabel("Workspace Anthropic (facoltativo)", { exact: false })
+            .fill("wrkspc_test");
+        const save = settings.getByRole("button", { name: "Salva" });
+        if (secure) {
+          await save.click();
+          await settings.getByText("Chiave configurata (…abcd)").waitFor();
+          expect(readFileSync(join(dataDir, "settings.json"), "utf8")).not.toContain(KEY);
+          if (provider === "anthropic") {
+            await settings.getByRole("button", { name: "Usa come predefinito" }).click();
+            await settings.getByText("Provider predefinito", { exact: true }).waitFor();
+          }
+        } else {
+          await settings.getByRole("alert").waitFor();
+          expect(await save.isDisabled()).toBe(true);
+          expect(existsSync(join(dataDir, "settings.json"))).toBe(false);
+        }
+        // Without a secure OS keystore the environment still provides a synthetic key.
+        if (provider === "anthropic" && !secure)
+          await page.evaluate(() => window.octo.selectRemote("anthropic"));
+        await settings.getByRole("button", { name: "Chiudi" }).click();
 
-    const db = new DatabaseSync(join(dataDir, "octo.db"));
-    const approvals = db
-      .prepare("SELECT approved_by, approved_at IS NOT NULL AS dated FROM evidence")
-      .all();
-    const runs = db.prepare("SELECT provider, data_mode, outcome FROM analysis_runs").all();
-    const network = db
-      .prepare("SELECT COUNT(*) AS count FROM audit_events WHERE action = 'network'")
-      .get();
-    const stored = JSON.stringify(db.prepare("SELECT * FROM audit_events").all());
-    db.close();
-    expect(approvals).toEqual([{ approved_by: "operator:op-demo", dated: 1 }]);
-    expect(runs).toEqual([
-      { provider: "openrouter", data_mode: "cloud_after_review", outcome: "accepted" },
-    ]);
-    expect(network).toEqual({ count: 1 });
-    expect(stored).not.toContain(KEY);
-    const chats = openrouter.received.filter((call) => call.path.endsWith("/chat/completions"));
-    expect(chats).toHaveLength(1);
-    expect(chats[0]?.authorization).toBe(`Bearer ${secure ? KEY : ENV_KEY}`);
-    expect(chats[0]?.body).toContain("schermo");
-    const keyChecks = openrouter.received.filter((call) => call.path.endsWith("/key"));
-    expect(keyChecks).toHaveLength(secure ? 1 : 0);
-  }, 240_000);
+        const stale = await page.evaluate(async () => {
+          const state = await window.octo.getState();
+          try {
+            await window.octo.analyzeRemote({
+              sessionId: state.sessions[0]!.sessionId,
+              provider: state.remote.provider === "anthropic" ? "openrouter" : "anthropic",
+              model: state.remote.model!,
+            });
+            return "unexpected success";
+          } catch (error) {
+            return String(error);
+          }
+        });
+        expect(stale).toContain("cambiati");
+        if (provider === "anthropic") {
+          const wrongWorkspace = await page.evaluate(async () => {
+            const state = await window.octo.getState();
+            try {
+              await window.octo.analyzeRemote({
+                sessionId: state.sessions[0]!.sessionId,
+                provider: "anthropic",
+                model: state.remote.model!,
+                workspaceId: "wrkspc_other",
+              });
+              return "unexpected success";
+            } catch (error) {
+              return String(error);
+            }
+          });
+          expect(wrongWorkspace).toContain("cambiati");
+        }
+        const detail = page.getByRole("article", { name: "Dettaglio sessione" });
+        await detail.getByRole("button", { name: `Analizza con ${label}` }).click();
+        const confirm = detail.getByRole("region", { name: `Conferma invio a ${label}` });
+        await confirm.getByText("testo letto da 1 schermata", { exact: false }).waitFor();
+        expect(openrouter.received.some((call) => call.path.endsWith(endpoint))).toBe(false);
+        await confirm.getByRole("button", { name: "Invia" }).click();
+        await page.getByText("Attività riconosciute: 1.", { exact: false }).waitFor();
+        await detail.getByText("Lavoro di prova").waitFor();
+
+        if (secure) {
+          await app.close();
+          app = await launch(dataDir, env);
+          page = await app.firstWindow();
+          await page.getByRole("button", { name: "Impostazioni" }).click();
+          const reopened = page.getByRole("region", { name: "Impostazioni" });
+          await reopened.getByText("Chiave configurata (…abcd)").waitFor();
+          await reopened.getByRole("button", { name: "Rimuovi" }).click();
+          await reopened.getByText("Nessuna chiave configurata.").waitFor();
+          const persisted = JSON.parse(readFileSync(join(dataDir, "settings.json"), "utf8"));
+          expect(persisted.providers[provider]).toBeUndefined();
+          if (provider === "anthropic") {
+            expect(persisted.providers.openrouter).toBeDefined();
+            expect(persisted.activeProvider).toBe("anthropic");
+          }
+        }
+        await app.close();
+      } finally {
+        await openrouter.close();
+      }
+
+      const db = new DatabaseSync(join(dataDir, "octo.db"));
+      const approvals = db
+        .prepare("SELECT approved_by, approved_at IS NOT NULL AS dated FROM evidence")
+        .all();
+      const runs = db.prepare("SELECT provider, data_mode, outcome FROM analysis_runs").all();
+      const network = db
+        .prepare("SELECT COUNT(*) AS count FROM audit_events WHERE action = 'network'")
+        .get();
+      const stored = JSON.stringify(db.prepare("SELECT * FROM audit_events").all());
+      db.close();
+      expect(approvals).toEqual([{ approved_by: "operator:op-demo", dated: 1 }]);
+      expect(runs).toEqual([{ provider, data_mode: "cloud_after_review", outcome: "accepted" }]);
+      expect(network).toEqual({ count: 1 });
+      expect(stored).not.toContain(KEY);
+      const chats = openrouter.received.filter((call) => call.path.endsWith(endpoint));
+      expect(chats).toHaveLength(1);
+      if (provider === "anthropic" && secure) expect(chats[0]?.workspace).toBe("wrkspc_test");
+      expect(chats[0]?.authorization).toBe(
+        `${provider === "openrouter" ? "Bearer " : ""}${secure ? KEY : ENV_KEY}`,
+      );
+      expect(chats[0]?.body).toContain("schermo");
+      const keyChecks = openrouter.received.filter(
+        (call) => call.path.endsWith("/key") || call.path.includes("/models?"),
+      );
+      expect(keyChecks).toHaveLength(secure ? (provider === "anthropic" ? 2 : 1) : 0);
+    },
+    240_000,
+  );
 });

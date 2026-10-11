@@ -68,6 +68,8 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
         remote: await engine.configureRemoteModel({
           remote: command.remote,
           verify: command.verify,
+          verifyOnly: command.verifyOnly,
+          environmentProvider: command.environmentProvider,
         }),
       };
     case "review.approve":

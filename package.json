@@ -1,6 +1,6 @@
 {
   "name": "octo-core",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -15,6 +15,7 @@
     "test:ollama": "vitest run --config vitest.ollama.config.ts",
     "test:replay": "vitest run --config vitest.replay.config.ts",
     "test:desktop:windows": "node scripts/gates/track-pending.ts B",
+    "test:anthropic": "vitest run --config vitest.anthropic.config.ts",
     "test:model:live": "vitest run --config vitest.openrouter.config.ts",
     "gate": "tsx scripts/gates/run.ts",
     "gate:all": "tsx scripts/gates/run.ts --all",

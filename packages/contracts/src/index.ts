@@ -4,6 +4,7 @@ export {
   economicsInputSchema,
   economicsOracleSchema,
   engineCommandSchema,
+  remoteProviderSchema,
   remoteModelConfigSchema,
   remoteModelStatusSchema,
   sessionOracleSchema,
@@ -47,7 +48,15 @@ export type {
   EconomicsOracle,
   EngineCommand,
   OracleStretch,
+  RemoteProvider,
   RemoteModelConfig,
   RemoteModelStatus,
   SessionOracle,
 } from "./oracle.js";
+
+export {
+  remoteSettingsSchema,
+  legacyRemoteSettingsSchema,
+  remoteAnalysisInputSchema,
+} from "./remote-settings.js";
+export type { RemoteSettingsFile } from "./remote-settings.js";

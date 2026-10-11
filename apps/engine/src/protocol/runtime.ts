@@ -1,3 +1,9 @@
+import { remoteProviderSchema, type RemoteProvider } from "@octo/contracts";
+import {
+  createAnthropicAdapter,
+  verifyAnthropicKey,
+  DEFAULT_ANTHROPIC_MAX_TOKENS,
+} from "../analysis/anthropic.js";
 import { z } from "zod";
 import { fixtureProfile } from "../analysis/fixture-adapter.js";
 import {
@@ -21,7 +27,7 @@ const positiveIntSchema = z.coerce.number().int().positive();
 
 /**
  * Options for the engine process: real clocks, the local model chosen by `OCTO_MODEL`, and
- * OpenRouter as the remote model for the cloud modes when `OPENROUTER_API_KEY` is set.
+ * The selected cloud provider is wired only when its API key is set.
  */
 export function runtimeOptions(env: NodeJS.ProcessEnv = process.env): EngineOptions {
   return {
@@ -47,7 +53,7 @@ export function ocrReader(env: NodeJS.ProcessEnv): OcrReader | undefined {
 
 /**
  * `OCTO_MODEL=fixture` replays the test fixture; `off` leaves no local model. The remote slot
- * depends only on `OPENROUTER_API_KEY`, so the cloud modes stay available with either.
+ * is independent of the local slot and uses only the selected provider’s key.
  */
 export function analysisProfile(env: NodeJS.ProcessEnv): AnalysisProfile {
   const maxFrameSpanMs = positiveInt(env, "OCTO_FRAME_SPAN_MS", DEFAULT_FRAME_SPAN_MS);
@@ -75,29 +81,57 @@ function ocrModel(env: NodeJS.ProcessEnv): string {
 }
 
 function remoteModel(env: NodeJS.ProcessEnv): ModelAdapter | undefined {
-  const apiKey = env.OPENROUTER_API_KEY?.trim() ?? "";
-  if (apiKey === "") return undefined;
-  const model = env.OPENROUTER_MODEL?.trim() || undefined;
-  return remoteModels(env).create({ provider: "openrouter", apiKey, model });
+  const selected = env.OCTO_REMOTE_PROVIDER?.trim();
+  const provider = selected
+    ? remoteProviderSchema.parse(selected)
+    : env.OPENROUTER_API_KEY?.trim()
+      ? "openrouter"
+      : "anthropic";
+  return remoteModels(env).environment?.(provider);
 }
 
-/** OpenRouter for a key from the environment at start, or one the operator sets in the app. */
 export function remoteModels(env: NodeJS.ProcessEnv): RemoteModels {
   const baseUrl = openRouterBase(env);
+  const anthropicBase = providerBase(env, "OCTO_ANTHROPIC_URL");
   const maxTokens = positiveInt(env, "OPENROUTER_MAX_TOKENS", DEFAULT_OPENROUTER_MAX_TOKENS);
-  return {
+  const anthropicMax = positiveInt(env, "ANTHROPIC_MAX_TOKENS", DEFAULT_ANTHROPIC_MAX_TOKENS);
+  const models: RemoteModels = {
     create: (config) =>
-      createOpenRouterAdapter({ apiKey: config.apiKey, model: config.model, maxTokens, baseUrl }),
-    verify: (config) => verifyOpenRouterKey(config.apiKey, { baseUrl }),
+      config.provider === "anthropic"
+        ? createAnthropicAdapter({ ...config, maxTokens: anthropicMax, baseUrl: anthropicBase })
+        : createOpenRouterAdapter({ ...config, maxTokens, baseUrl }),
+    verify: (config) =>
+      config.provider === "anthropic"
+        ? verifyAnthropicKey({ ...config, baseUrl: anthropicBase })
+        : verifyOpenRouterKey(config.apiKey, { baseUrl }),
+    environment: (provider: RemoteProvider) => {
+      const prefix = provider === "anthropic" ? "ANTHROPIC" : "OPENROUTER";
+      const apiKey = env[`${prefix}_API_KEY`]?.trim();
+      return apiKey
+        ? models.create({
+            provider,
+            apiKey,
+            model: env[`${prefix}_MODEL`]?.trim() || undefined,
+            ...(provider === "anthropic"
+              ? { workspaceId: env.ANTHROPIC_WORKSPACE_ID?.trim() || undefined }
+              : {}),
+          })
+        : undefined;
+    },
   };
+  return models;
 }
 
 /** Test seam: `OCTO_OPENROUTER_URL` may only point to a fake server on this computer. */
 export function openRouterBase(env: NodeJS.ProcessEnv): string | undefined {
-  const raw = env.OCTO_OPENROUTER_URL?.trim();
+  return providerBase(env, "OCTO_OPENROUTER_URL");
+}
+
+function providerBase(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const raw = env[name]?.trim();
   if (!raw) return undefined;
   if (!isLoopbackUrl(raw)) {
-    throw new OctoError("invalid_config", "OCTO_OPENROUTER_URL must point to this computer");
+    throw new OctoError("invalid_config", `${name} must point to this computer`);
   }
   return raw.replace(/\/+$/, "");
 }

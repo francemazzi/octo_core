@@ -13,7 +13,10 @@ describe("secret scan", () => {
     const openRouterKey = `${"sk-or-v1-"}${"0123456789abcdef"}`;
     writeFileSync(join(root, ".env"), `OPENROUTER_API_KEY=${openRouterKey}\n`);
     writeFileSync(join(root, "notes.md"), `chiave ${openRouterKey}\n`);
+    const anthropicKey = `${"sk-ant-"}${"a".repeat(30)}`;
+    writeFileSync(join(root, "anthropic.txt"), anthropicKey);
     const hits = findSecrets(root);
+    expect(hits).toContainEqual({ file: "anthropic.txt", name: "anthropic-key" });
     expect(hits.map((hit) => hit.file)).toContain("leak.ts");
     expect(hits.map((hit) => hit.file)).toContain("notes.md");
     expect(hits.map((hit) => hit.file)).not.toContain("ok.ts");

@@ -48,13 +48,17 @@ export function Dashboard() {
         ) : null}
         {state.note ? <p className="note">{state.note}</p> : null}
         {settingsOpen ? (
-          <Settings remote={state.remote} onClose={() => setSettingsOpen(false)} />
+          <Settings
+            key={state.remote.provider ?? "none"}
+            remote={state.remote}
+            onClose={() => setSettingsOpen(false)}
+          />
         ) : item ? (
           <SessionDetail
             item={item}
             analyzing={state.analyzingSessionId === item.sessionId}
             busy={state.analyzingSessionId !== null}
-            remoteAvailable={state.remote.available}
+            remote={state.remote}
           />
         ) : (
           <p className="muted">Scegli uno schermo e avvia la prima sessione.</p>

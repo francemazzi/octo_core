@@ -1,3 +1,4 @@
+import type { UiRemote } from "../shared/ui-state.js";
 import type { SessionDetail as Detail, SessionListItem } from "@octo/contracts";
 import { useEffect, useState } from "react";
 import { QuestionsPanel } from "./QuestionsPanel.js";
@@ -16,7 +17,7 @@ type Props = {
   analyzing: boolean;
   /** Another session is being analysed: one analysis at a time. */
   busy: boolean;
-  remoteAvailable: boolean;
+  remote: UiRemote;
 };
 
 /** Refetched whenever the list shows a change for this session (state, activities, questions). */
@@ -31,7 +32,7 @@ function versionOf(item: SessionListItem): string {
   ].join("|");
 }
 
-export function SessionDetail({ item, analyzing, busy, remoteAvailable }: Props) {
+export function SessionDetail({ item, analyzing, busy, remote }: Props) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const { run, error } = useAction();
   const version = versionOf(item);
@@ -95,8 +96,13 @@ export function SessionDetail({ item, analyzing, busy, remoteAvailable }: Props)
           Analizza
         </button>
       ) : null}
-      {remoteAvailable && !live && !busy && loaded ? (
-        <RemoteAnalysis sessionId={item.sessionId} evidenceCount={loaded.evidenceCount} />
+      {remote.available && !live && !busy && loaded ? (
+        <RemoteAnalysis
+          key={`${item.sessionId}:${remote.provider}:${remote.model}:${remote.workspaceId}`}
+          remote={remote}
+          sessionId={item.sessionId}
+          evidenceCount={loaded.evidenceCount}
+        />
       ) : null}
       {loaded?.lastRun?.partial ? (
         <p className="muted">

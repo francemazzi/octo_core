@@ -33,6 +33,7 @@ export type ModelStatus = { up: boolean; model: string | null };
  */
 export interface ModelAdapter {
   readonly provider: string;
+  readonly workspaceId?: string;
   readonly locality: ModelLocality;
   readonly promptSchema: string;
   status(): Promise<ModelStatus>;

@@ -165,6 +165,10 @@ export function createAnalysisService(deps: AnalysisServiceDeps) {
   return {
     /** Re-entrant: a waiting or finished run in the same mode never calls the model again. */
     async run(mode: DataMode, sessionId?: string): Promise<AnalysisResult> {
+      const runDeps = {
+        ...graphDeps,
+        profile: { ...deps.profile, models: { ...deps.profile.models } },
+      };
       const session = sessionId ? loadSession(sessionId) : deps.requireSession();
       if (!session) throw new OctoError("missing_session", sessionId ?? "none");
       const pending = await pendingInterrupt(graphDeps, session);
@@ -183,7 +187,7 @@ export function createAnalysisService(deps: AnalysisServiceDeps) {
         const state = current.analysis_state === "completed" ? "completed" : "pending";
         return result(session.id, state, "reviewed_session", lastModel(session.id));
       }
-      return execute(session, mode, () => runSessionGraph(graphDeps, session, mode));
+      return execute(session, mode, () => runSessionGraph(runDeps, session, mode));
     },
     /** Stores the answer; an accepted answer to the question the graph waits on resumes it. */
     async answer(input: {

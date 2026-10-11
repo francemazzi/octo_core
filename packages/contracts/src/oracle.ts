@@ -104,9 +104,17 @@ export const PROTOCOL_VERSION = 1;
  * A remote model key set by the operator in the app. It travels only from the desktop main
  * process to the engine, which never writes it to disk, logs or replies.
  */
+export const remoteProviderSchema = z.enum(["openrouter", "anthropic"]);
+export type RemoteProvider = z.infer<typeof remoteProviderSchema>;
+export const anthropicWorkspaceIdSchema = z
+  .string()
+  .regex(/^wrkspc_[A-Za-z0-9]+$/)
+  .max(100);
+
 export const remoteModelConfigSchema = z
   .object({
-    provider: z.literal("openrouter"),
+    provider: remoteProviderSchema,
+    workspaceId: anthropicWorkspaceIdSchema.optional(),
     apiKey: z
       .string()
       .min(16)
@@ -119,7 +127,10 @@ export const remoteModelConfigSchema = z
       .regex(/^[\w.:/-]+$/)
       .optional(),
   })
-  .strict();
+  .strict()
+  .refine((config) => config.provider === "anthropic" || config.workspaceId === undefined, {
+    message: "Workspace is supported only by Anthropic",
+  });
 
 export type RemoteModelConfig = z.infer<typeof remoteModelConfigSchema>;
 
@@ -129,6 +140,7 @@ export const remoteModelStatusSchema = z
     provider: z.string(),
     model: z.string().nullable(),
     source: z.enum(["settings", "env"]),
+    workspaceId: z.string().optional(),
   })
   .nullable();
 
@@ -245,6 +257,8 @@ export const engineCommandSchema = z.discriminatedUnion("cmd", [
     cmd: z.literal("model.configure"),
     verify: z.boolean(),
     remote: remoteModelConfigSchema.nullable(),
+    verifyOnly: z.boolean().optional(),
+    environmentProvider: remoteProviderSchema.optional(),
   }),
   z.object({
     v: z.number(),

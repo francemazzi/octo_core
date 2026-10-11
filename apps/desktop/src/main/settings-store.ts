@@ -1,77 +1,90 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  remoteSettingsSchema,
+  legacyRemoteSettingsSchema,
+  type RemoteSettingsFile as SettingsFile,
+  type RemoteProvider,
+} from "@octo/contracts";
 
-/** Encrypts with the operating system keystore (Electron `safeStorage` in the app). */
 export interface SecretBox {
-  /** Why a secret cannot be stored safely on this computer, or null. */
   problem(): string | null;
   encrypt(text: string): Buffer;
   decrypt(data: Buffer): string;
 }
-
-export type OpenRouterSetting = { apiKey: string; model?: string };
-
-/** What the dashboard may know about the key: never the key itself. */
-export type OpenRouterSummary = { configured: boolean; hint: string | null; model: string | null };
-
-type SettingsFile = {
-  version: 1;
-  openrouter?: { keyCiphertext: string; hint: string; model?: string };
+export type RemoteSetting = { apiKey: string; model?: string; workspaceId?: string };
+export type RemoteSummary = {
+  configured: boolean;
+  hint: string | null;
+  model: string | null;
+  workspaceId?: string;
 };
-
-const HINT_CHARS = 4;
-
-/**
- * App settings in one JSON file next to the engine data. The OpenRouter key is stored only as
- * keystore ciphertext; the file keeps its last four characters so the dashboard can show them.
- */
+/** Keys remain OS-keystore ciphertext; migration never decrypts the legacy credential. */
 export function createSettingsStore(file: string, box: SecretBox) {
-  function read(): SettingsFile {
-    if (!existsSync(file)) return { version: 1 };
-    const parsed = JSON.parse(readFileSync(file, "utf8")) as Partial<SettingsFile>;
-    return { version: 1, ...(parsed.openrouter ? { openrouter: parsed.openrouter } : {}) };
-  }
-
-  /** Written to a temporary file and renamed, readable by this user only. */
   function write(settings: SettingsFile): void {
     const temporary = `${file}.tmp`;
     writeFileSync(temporary, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
     renameSync(temporary, file);
   }
-
+  function read(): SettingsFile {
+    if (!existsSync(file)) return { version: 2, activeProvider: null, providers: {} };
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    const legacy = legacyRemoteSettingsSchema.safeParse(parsed);
+    if (legacy.success) {
+      const migrated: SettingsFile = {
+        version: 2,
+        activeProvider: legacy.data.openrouter ? "openrouter" : null,
+        providers: { ...(legacy.data.openrouter ? { openrouter: legacy.data.openrouter } : {}) },
+      };
+      write(migrated);
+      return migrated;
+    }
+    return remoteSettingsSchema.parse(parsed);
+  }
   return {
+    snapshot: read,
+    restore(snapshot: SettingsFile): void {
+      if (JSON.stringify(read()) !== JSON.stringify(snapshot)) write(snapshot);
+    },
     problem: () => box.problem(),
-    summary(): OpenRouterSummary {
-      const stored = read().openrouter;
+    active: () => read().activeProvider,
+    select(provider: RemoteProvider): void {
+      write({ ...read(), activeProvider: provider });
+    },
+    summary(provider: RemoteProvider): RemoteSummary {
+      const stored = read().providers[provider];
       return {
         configured: stored !== undefined,
         hint: stored?.hint ?? null,
         model: stored?.model ?? null,
+        ...(stored?.workspaceId ? { workspaceId: stored.workspaceId } : {}),
       };
     },
-    readOpenRouter(): OpenRouterSetting | null {
-      const stored = read().openrouter;
+    credential(provider: RemoteProvider): RemoteSetting | null {
+      const stored = read().providers[provider];
       if (!stored || box.problem()) return null;
-      const apiKey = box.decrypt(Buffer.from(stored.keyCiphertext, "base64"));
-      return { apiKey, ...(stored.model ? { model: stored.model } : {}) };
+      return {
+        apiKey: box.decrypt(Buffer.from(stored.keyCiphertext, "base64")),
+        ...(stored.model ? { model: stored.model } : {}),
+        ...(stored.workspaceId ? { workspaceId: stored.workspaceId } : {}),
+      };
     },
-    writeOpenRouter(setting: OpenRouterSetting): void {
+    save(provider: RemoteProvider, setting: RemoteSetting): void {
       const problem = box.problem();
       if (problem) throw new Error(problem);
-      write({
-        ...read(),
-        openrouter: {
-          keyCiphertext: box.encrypt(setting.apiKey).toString("base64"),
-          hint: setting.apiKey.slice(-HINT_CHARS),
-          ...(setting.model ? { model: setting.model } : {}),
-        },
-      });
-    },
-    clearOpenRouter(): void {
       const settings = read();
-      delete settings.openrouter;
+      settings.providers[provider] = {
+        keyCiphertext: box.encrypt(setting.apiKey).toString("base64"),
+        hint: setting.apiKey.slice(-4),
+        ...(setting.model ? { model: setting.model } : {}),
+        ...(setting.workspaceId ? { workspaceId: setting.workspaceId } : {}),
+      };
+      write(settings);
+    },
+    remove(provider: RemoteProvider): void {
+      const settings = read();
+      delete settings.providers[provider];
       write(settings);
     },
   };
 }
-
 export type SettingsStore = ReturnType<typeof createSettingsStore>;

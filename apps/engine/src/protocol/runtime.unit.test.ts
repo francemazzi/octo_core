@@ -48,4 +48,20 @@ describe("engine runtime wiring", () => {
       expect.objectContaining({ code: "invalid_config" }),
     );
   });
+  it("selects explicit environment providers without a fallback to another key", () => {
+    const env = { ...KEY, ANTHROPIC_API_KEY: "octo-anthropic-key-test" };
+    expect(analysisProfile(env).models.remote?.provider).toBe("openrouter");
+    expect(
+      analysisProfile({ ...env, OCTO_REMOTE_PROVIDER: "anthropic" }).models.remote?.provider,
+    ).toBe("anthropic");
+    expect(
+      analysisProfile({ ...KEY, OCTO_REMOTE_PROVIDER: "anthropic" }).models.remote,
+    ).toBeUndefined();
+    expect(
+      analysisProfile({ ANTHROPIC_API_KEY: "octo-anthropic-key-test" }).models.remote?.provider,
+    ).toBe("anthropic");
+    expect(() => analysisProfile({ OCTO_ANTHROPIC_URL: "https://evil.example" })).toThrow();
+    expect(() => analysisProfile({ ANTHROPIC_MAX_TOKENS: "0" })).toThrow();
+    expect(() => analysisProfile({ OCTO_REMOTE_PROVIDER: "unknown" })).toThrow();
+  });
 });

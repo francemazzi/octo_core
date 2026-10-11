@@ -7,6 +7,7 @@ const PATTERNS: Array<{ name: string; pattern: RegExp }> = [
   { name: "private-key", pattern: /-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----/ },
   { name: "github-token", pattern: /ghp_[A-Za-z0-9]{20,}/ },
   { name: "slack-token", pattern: /xox[baprs]-[A-Za-z0-9-]{10,}/ },
+  { name: "anthropic-key", pattern: /sk-ant-[A-Za-z0-9_-]{20,}/ },
   { name: "openrouter-key", pattern: /sk-or-v1-[A-Za-z0-9]+/ },
 ];
 

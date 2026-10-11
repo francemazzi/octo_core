@@ -29,8 +29,14 @@ export function fakeModelNetwork(models: FakeModels = {}): {
     const url = String(input);
     const body = typeof init?.body === "string" ? init.body : "";
     const headers = new Headers(init?.headers);
-    calls.push({ url, body, authorization: headers.get("authorization") });
+    calls.push({
+      url,
+      body,
+      authorization: headers.get("authorization") ?? headers.get("x-api-key"),
+    });
     if (url.endsWith("/api/tags")) return Response.json({ models: models.tags ?? [] });
+    if (url.includes("/models?"))
+      return Response.json({ data: [] }, { status: models.keyStatus ?? 200 });
     if (url.endsWith("/key")) {
       return Response.json({ data: { label: "test" } }, { status: models.keyStatus ?? 200 });
     }
@@ -45,6 +51,13 @@ export function fakeModelNetwork(models: FakeModels = {}): {
     prompts.push(user?.content ?? "");
     const content = JSON.stringify(models.reply?.(user?.content ?? "", prompts.length) ?? {});
     if (url.endsWith("/api/chat")) return Response.json({ message: { content } });
+    if (url.endsWith("/messages"))
+      return Response.json({
+        model: parsed.model,
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: content }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
     return Response.json({
       model: parsed.model,
       choices: [{ message: { content } }],

@@ -9,19 +9,26 @@ type AnalysisReply = {
   partial?: boolean;
 };
 
-function modelLine(extracted: AnalysisReply, local: boolean): string {
+function modelLine(extracted: AnalysisReply, local: boolean, remoteLabel: string): string {
   if (extracted.reason === "reviewed_session") {
     return "Hai già confermato le attività: una nuova analisi non le sostituisce.";
   }
   if (extracted.model) {
-    return local ? `Ollama acceso (${extracted.model}).` : `OpenRouter (${extracted.model}).`;
+    if (!local && extracted.reason === "already_analyzed")
+      return `Analisi già presente (${extracted.model}).`;
+    return local ? `Ollama acceso (${extracted.model}).` : `${remoteLabel} (${extracted.model}).`;
   }
   if (extracted.reason === "no_evidence") return "Nessuna schermata letta.";
-  return local ? "Ollama spento." : "OpenRouter non ha risposto.";
+  return local ? "Ollama spento." : `${remoteLabel} non ha risposto.`;
 }
 
 /** One line after an analysis: model state, what was extracted, coverage, mini report. */
-export function analysisNote(analysis: unknown, report: unknown, mode = "local_only"): string {
+export function analysisNote(
+  analysis: unknown,
+  report: unknown,
+  mode = "local_only",
+  remoteLabel = "OpenRouter",
+): string {
   const extracted = analysis as AnalysisReply;
   const written = report as { issued?: boolean; path?: string | null };
   const accepted = extracted.reason === "accepted" || extracted.reason === "already_analyzed";
@@ -35,7 +42,7 @@ export function analysisNote(analysis: unknown, report: unknown, mode = "local_o
     : "";
   const question = extracted.analysis === "awaiting_answer" ? " C'è una domanda per te." : "";
   const cadence = written.issued && written.path ? ` Mini report: ${written.path}` : "";
-  return `${modelLine(extracted, mode === "local_only")} ${episodes}${partial}${question}${cadence}`;
+  return `${modelLine(extracted, mode === "local_only", remoteLabel)} ${episodes}${partial}${question}${cadence}`;
 }
 
 export function describeError(prefix: string, error: unknown): string {

@@ -62,6 +62,7 @@ app.whenReady().then(async () => {
   control = session;
   const remote = createRemoteModel({
     request,
+    analyzing: () => session.state.analyzingSessionId !== null,
     store: createSettingsStore(join(dataDir, "settings.json"), keystoreBox()),
     publish: (state) => {
       session.state.remote = state;
@@ -85,9 +86,13 @@ app.whenReady().then(async () => {
     },
     "octo:mascotPointer": (payload, event) =>
       windows.setMascotPointer(event.sender, payload === true),
-    "octo:saveOpenRouter": (payload) => remote.save(payload),
-    "octo:removeOpenRouter": () => remote.remove(),
-    "octo:analyzeRemote": (payload) => session.analyzeRemote(payload),
+    "octo:saveRemote": (payload) => remote.save(payload),
+    "octo:removeRemote": (payload) => remote.remove(payload),
+    "octo:selectRemote": (payload) => remote.select(payload),
+    "octo:analyzeRemote": (payload) => {
+      if (remote.busy()) throw new Error("Attendi il salvataggio delle impostazioni.");
+      return session.analyzeRemote(payload);
+    },
   });
 
   const dashboard = windows.createDashboard();
