@@ -24,7 +24,11 @@
     "scan:secrets": "tsx scripts/gates/scan-secrets.ts",
     "check:licenses": "tsx scripts/gates/check-licenses.ts",
     "package:win": "tsx scripts/package-win.ts",
-    "package:release": "tsx scripts/package-release.ts"
+    "package:release": "tsx scripts/package-release.ts",
+    "site:screenshots": "tsx scripts/site/screenshots.ts",
+    "site:releases": "tsx scripts/site/releases-json.ts",
+    "site:check": "tsx scripts/site/check-site.ts",
+    "site:preview": "python3 -m http.server 4173 --directory site"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -64,6 +64,10 @@ OCTO_NOTARY_PROFILE=octo-release-local pnpm package:release mac-arm64 mac-x64
 
 L'identità viene letta dal keychain di login. Il profilo resta nel keychain, mai in file.
 
+## Landing page
+
+Dopo il job `publish`, `release.yml` chiama `pages.yml`, che scrive `site/releases.json` dal tag appena pubblicato (`pnpm site:releases --tag vX.Y.Z`), esegue `pnpm site:check` e pubblica `site/` su GitHub Pages (`https://francemazzi.github.io/octo_core/`). Una release creata con `GITHUB_TOKEN` non attiva i workflow `on: release`, perciò il deploy è incatenato. Lo stesso workflow parte anche a ogni push su `site/` e a mano (`gh workflow run pages.yml`).
+
 ## Windows
 
 Script: `scripts/release/sign-win.ts` (Jsign da macOS/Linux) e `scripts/ci/*.ps1` (signtool su host Windows).

@@ -1,6 +1,6 @@
 # Octo Core
 
-[Repository GitHub](https://github.com/francemazzi/octo_core) · [Roadmap di sviluppo](./roadmap.md)
+[Sito e download](https://francemazzi.github.io/octo_core/) · [Repository GitHub](https://github.com/francemazzi/octo_core) · [Roadmap di sviluppo](./roadmap.md)
 
 **Dal lavoro osservato a un processo documentato. Prima di automatizzare.**
 
@@ -177,3 +177,7 @@ Octo Core è software libero distribuito sotto **GPL-3.0-or-later** (file `LICEN
 I pacchetti macOS sono firmati con Developer ID e notarizzati da Apple quando la release è prodotta con le credenziali configurate. I pacchetti Windows sono firmati con Azure Artifact Signing solo se il servizio è configurato; in caso contrario escono **non firmati** e la release lo dichiara in `UNSIGNED.txt`. Su un binario non firmato SmartScreen mostra «PC protetto da Windows»: procedere con «Ulteriori informazioni» → «Esegui comunque» solo dopo aver verificato l'hash. Anche un binario appena firmato può ricevere l'avviso finché non acquisisce reputazione. Linux è distribuito senza firma.
 
 Ogni release pubblica `SHA256SUMS.txt`. Per verificare un download: `shasum -a 256 -c SHA256SUMS.txt` su macOS/Linux nella cartella dei file, oppure `certutil -hashfile <file> SHA256` su Windows confrontando il valore con la riga corrispondente. Processo completo, nomi dei secret e passi manuali in [docs/releases/firma.md](./docs/releases/firma.md); decisione in [ADR 0002](./docs/adr/0002-firma-e-licenza.md).
+
+## Sito
+
+La landing page in `site/` (italiano e inglese) è pubblicata su GitHub Pages: <https://francemazzi.github.io/octo_core/>. Il bottone di download riconosce sistema e architettura del visitatore e legge la versione da `site/releases.json`, rigenerato dal workflow `pages.yml` a ogni release (incatenato a `release.yml`) o a ogni push su `site/`. Gli screenshot in `site/assets/` vengono dall'app reale su sessioni sintetiche: `pnpm site:screenshots` li rigenera, `pnpm site:check` verifica pagina e versioni, `pnpm site:preview` serve il sito in locale.

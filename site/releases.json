@@ -1,0 +1,73 @@
+{
+  "version": "1.2.0",
+  "tag": "v1.2.0",
+  "publishedAt": "2026-10-12T22:29:55Z",
+  "url": "https://github.com/francemazzi/octo_core/releases/tag/v1.2.0",
+  "assets": [
+    {
+      "name": "LICENSE",
+      "url": "https://github.com/francemazzi/octo_core/releases/download/v1.2.0/LICENSE",
+      "size": 35149
+    },
+    {
+      "name": "OctoCore-1.2.0-linux-arm64.zip",
+      "url": "https://github.com/francemazzi/octo_core/releases/download/v1.2.0/OctoCore-1.2.0-linux-arm64.zip",
+      "size": 126214610
+    },
+    {
+      "name": "OctoCore-1.2.0-linux-x64.zip",
+      "url": "https://github.com/francemazzi/octo_core/releases/download/v1.2.0/OctoCore-1.2.0-linux-x64.zip",
+      "size": 125094502
+    },
+    {
+      "name": "OctoCore-1.2.0-mac-arm64.dmg",
+      "url": "https://github.com/francemazzi/octo_core/releases/download/v1.2.0/OctoCore-1.2.0-mac-arm64.dmg",
+      "size": 144471366
+    },
+    {
+      "name": "OctoCore-1.2.0-mac-arm64.zip",
+      "url": "https://github.com/francemazzi/octo_core/releases/download/v1.2.0/OctoCore-1.2.0-mac-arm64.zip",
+      "size": 131457083
+    },
+    {
+      "name": "OctoCore-1.2.0-mac-x64.dmg",
+      "url": "https://github.com/francemazzi/octo_core/releases/download/v1.2.0/OctoCore-1.2.0-mac-x64.dmg",
+      "size": 153414800
+    },
+    {
+      "name": "OctoCore-1.2.0-mac-x64.zip",
+      "url": "https://github.com/francemazzi/octo_core/releases/download/v1.2.0/OctoCore-1.2.0-mac-x64.zip",
+      "size": 138527295
+    },
+    {
+      "name": "OctoCore-1.2.0-win-arm64.zip",
+      "url": "https://github.com/francemazzi/octo_core/releases/download/v1.2.0/OctoCore-1.2.0-win-arm64.zip",
+      "size": 158832943
+    },
+    {
+      "name": "OctoCore-1.2.0-win-x64.zip",
+      "url": "https://github.com/francemazzi/octo_core/releases/download/v1.2.0/OctoCore-1.2.0-win-x64.zip",
+      "size": 160377230
+    },
+    {
+      "name": "SHA256SUMS.txt",
+      "url": "https://github.com/francemazzi/octo_core/releases/download/v1.2.0/SHA256SUMS.txt",
+      "size": 756
+    },
+    {
+      "name": "THIRD-PARTY-NOTICES.txt",
+      "url": "https://github.com/francemazzi/octo_core/releases/download/v1.2.0/THIRD-PARTY-NOTICES.txt",
+      "size": 3364
+    },
+    {
+      "name": "windows-signing-report-win-arm64.json",
+      "url": "https://github.com/francemazzi/octo_core/releases/download/v1.2.0/windows-signing-report-win-arm64.json",
+      "size": 1686
+    },
+    {
+      "name": "windows-signing-report-win-x64.json",
+      "url": "https://github.com/francemazzi/octo_core/releases/download/v1.2.0/windows-signing-report-win-x64.json",
+      "size": 1686
+    }
+  ]
+}

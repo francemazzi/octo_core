@@ -1,0 +1,72 @@
+name: pages
+
+# Builds site/releases.json from the published release and deploys site/ to GitHub Pages.
+# Called by release.yml after a release (a release made with GITHUB_TOKEN does not trigger
+# `on: release`), on pushes that touch the site, and by hand.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to publish on the page (default: the latest release)"
+        type: string
+        required: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish on the page (default: the latest release)"
+        type: string
+        required: false
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "scripts/site/**"
+      - ".github/workflows/pages.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy the landing page
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Write site/releases.json from the GitHub release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if [ -n "$RELEASE_TAG" ]; then pnpm site:releases --tag "$RELEASE_TAG"; else pnpm site:releases; fi
+      - run: pnpm site:check
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

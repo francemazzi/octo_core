@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title data-i18n="meta.title">Octo Core — documenta il lavoro prima di automatizzarlo</title>
+    <meta
+      name="description"
+      data-i18n-attr="content:meta.description"
+      content="Octo Core registra sessioni di lavoro autorizzate, ricostruisce le attività dalle evidenze e scrive un report DOCX. Locale per scelta, open source, firmato e notarizzato. Download gratuito per macOS, Windows e Linux."
+    />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://francemazzi.github.io/octo_core/" />
+    <meta property="og:title" content="Octo Core" />
+    <meta
+      property="og:description"
+      content="Dal lavoro osservato a un processo documentato. Prima di automatizzare."
+    />
+    <meta
+      property="og:image"
+      content="https://francemazzi.github.io/octo_core/assets/og-image.png"
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/png" sizes="64x64" href="assets/logo-64.png" />
+    <link rel="apple-touch-icon" href="assets/logo-256.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main" data-i18n="nav.skip">Vai al contenuto</a>
+    <header class="nav" id="top">
+      <a class="brand" href="#top" aria-label="Octo Core">
+        <img src="assets/logo-64.png" width="32" height="32" alt="" />
+        <span>Octo Core</span>
+      </a>
+      <nav class="nav-actions" aria-label="Navigazione" data-i18n-attr="aria-label:nav.aria">
+        <div class="lang" role="group" aria-label="Lingua" data-i18n-attr="aria-label:nav.lang">
+          <button type="button" data-lang="it" aria-pressed="true">IT</button>
+          <button type="button" data-lang="en" aria-pressed="false">EN</button>
+        </div>
+        <a class="pill ghost" href="https://github.com/francemazzi/octo_core" rel="noopener">
+          <span data-i18n="nav.github">GitHub</span>
+        </a>
+        <a class="pill solid nav-download" href="#download" data-nav-download>
+          <span data-i18n="nav.download">Scarica</span>
+        </a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="hero">
+        <p class="badge" data-release-badge>
+          <span class="dot" aria-hidden="true"></span>
+          <span data-i18n="hero.badge" data-template>Octo Core {version} è disponibile</span>
+        </p>
+        <h1>
+          <span data-i18n="hero.meet">Ecco</span>
+          <img class="h1-logo" src="assets/logo-256.png" width="72" height="72" alt="" />
+          <span>Octo</span>
+        </h1>
+        <p class="sub" data-i18n="hero.sub">
+          Dal lavoro osservato a un processo documentato. Prima di automatizzare.
+        </p>
+        <div class="cta" data-cta>
+          <a class="pill solid big" href="#download" data-primary-download rel="noopener">
+            <svg
+              class="os-glyph"
+              data-os-glyph="mac"
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              aria-hidden="true"
+              hidden
+            >
+              <path
+                fill="currentColor"
+                d="M16.37 12.68c.02 2.9 2.55 3.87 2.58 3.88-.02.07-.4 1.38-1.33 2.73-.8 1.17-1.63 2.33-2.94 2.35-1.28.03-1.7-.76-3.16-.76-1.47 0-1.93.74-3.14.79-1.27.05-2.23-1.26-3.04-2.42-1.65-2.38-2.9-6.72-1.21-9.65.84-1.46 2.34-2.38 3.97-2.4 1.24-.03 2.41.83 3.17.83.76 0 2.18-1.03 3.68-.88.63.03 2.39.25 3.52 1.9-.09.06-2.1 1.23-2.08 3.63M13.91 5.74c.67-.81 1.12-1.94 1-3.07-.97.04-2.13.64-2.83 1.45-.62.72-1.16 1.87-1.02 2.97 1.08.08 2.18-.55 2.85-1.35"
+              />
+            </svg>
+            <svg
+              class="os-glyph"
+              data-os-glyph="win"
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              aria-hidden="true"
+              hidden
+            >
+              <path
+                fill="currentColor"
+                d="M3 3h8.5v8.5H3zm9.5 0H21v8.5h-8.5zM3 12.5h8.5V21H3zm9.5 0H21V21h-8.5z"
+              />
+            </svg>
+            <svg
+              class="os-glyph"
+              data-os-glyph="linux"
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              aria-hidden="true"
+              hidden
+            >
+              <path
+                fill="currentColor"
+                d="M12 2c-2.6 0-4.2 2.1-4.2 5 0 1.3.3 2.2.1 3-.4 1.3-2.4 3.2-2.4 5.9 0 .9.2 1.6.5 2.2-.8.5-1.4 1-1.4 1.6 0 1 1.5 1.4 3.4 1.9.6.7 1.4 1.1 2.4 1.1h3.2c1 0 1.8-.4 2.4-1.1 1.9-.5 3.4-.9 3.4-1.9 0-.6-.6-1.1-1.4-1.6.3-.6.5-1.3.5-2.2 0-2.7-2-4.6-2.4-5.9-.2-.8.1-1.7.1-3C16.2 4.1 14.6 2 12 2m-1.6 5.1c.5 0 .8.6.8 1.3s-.3 1.3-.8 1.3-.8-.6-.8-1.3.3-1.3.8-1.3m3.2 0c.5 0 .8.6.8 1.3s-.3 1.3-.8 1.3-.8-.6-.8-1.3.3-1.3.8-1.3M12 10.2c.9 0 2.2.6 2.2 1.2s-1.3 1.6-2.2 1.6-2.2-1-2.2-1.6 1.3-1.2 2.2-1.2"
+              />
+            </svg>
+            <span data-download-label>Scarica</span>
+          </a>
+          <a class="pill ghost big" href="#download"
+            ><span data-i18n="hero.all">Tutte le versioni</span></a
+          >
+        </div>
+        <p class="alt" data-alt-download hidden>
+          <a href="#download" data-alt-link data-template data-i18n="hero.alt"
+            >Preferisci {target}?</a
+          >
+        </p>
+        <p class="alt" data-phone-note hidden data-i18n="hero.phone">
+          Octo è un'app per computer: scaricala da macOS, Windows o Linux.
+        </p>
+        <p class="note" data-i18n="hero.note">Firmato e notarizzato · GPL-3.0 · nessun account</p>
+      </section>
+
+      <section class="mockup" aria-label="Anteprima" data-i18n-attr="aria-label:hero.mockup">
+        <div class="frame">
+          <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+          <img
+            src="assets/dashboard.png"
+            width="1280"
+            height="800"
+            alt="La dashboard di Octo con una sessione analizzata"
+            data-i18n-attr="alt:hero.mockup"
+          />
+        </div>
+      </section>
+
+      <section class="how" id="how">
+        <h2 data-i18n="how.title">Come funziona</h2>
+        <div class="cards">
+          <article class="card">
+            <h3 data-i18n="how.1.title">Registrazione con la mascotte sempre visibile</h3>
+            <p data-i18n="how.1.text">
+              Scegli lo schermo, premi Avvia. Il polpo nell'angolo mostra che Octo registra; pausa e
+              stop restano a un clic. Nessuna registrazione nascosta, mai.
+            </p>
+            <div class="shot with-mascot">
+              <img src="assets/recording.png" width="1200" height="320" alt="" loading="lazy" />
+              <img
+                class="mascot"
+                src="assets/mascot.png"
+                width="160"
+                height="160"
+                alt=""
+                loading="lazy"
+              />
+            </div>
+          </article>
+          <article class="card">
+            <h3 data-i18n="how.2.title">Attività ricostruite dalle evidenze</h3>
+            <p data-i18n="how.2.text">
+              Alla chiusura, il testo letto dalle schermate diventa attività con nome, riassunto e
+              tempo: unione degli intervalli, mai somme gonfiate.
+            </p>
+            <div class="shot">
+              <img src="assets/activities.png" width="1200" height="600" alt="" loading="lazy" />
+            </div>
+          </article>
+          <article class="card">
+            <h3 data-i18n="how.3.title">Poche domande, risposte che contano</h3>
+            <p data-i18n="how.3.text">
+              Al massimo tre domande al giorno, solo quando il modello è incerto. La tua risposta
+              resta sull'attività come dichiarazione dell'operatore, nel dettaglio e nel report.
+            </p>
+            <div class="shot">
+              <img src="assets/questions.png" width="1200" height="400" alt="" loading="lazy" />
+            </div>
+          </article>
+          <article class="card">
+            <h3 data-i18n="how.4.title">Un assistente che cita le prove</h3>
+            <p data-i18n="how.4.text">
+              Chiedi cosa è successo nella sessione: ogni risposta cita attività e schermate,
+              verificate dal motore. Senza riscontri, la risposta è marcata come non verificata.
+            </p>
+            <div class="shot">
+              <img src="assets/assistant.png" width="1200" height="700" alt="" loading="lazy" />
+            </div>
+          </article>
+          <article class="card text">
+            <h3 data-i18n="how.5.title">Report DOCX e una cartella per attività</h3>
+            <p data-i18n="how.5.text">
+              Esporta un riepilogo con tempi, evidenze e dichiarazioni, più una cartella per
+              attività con il suo activity.json. I tratti non classificati finiscono in una cartella
+              da verificare.
+            </p>
+            <ul class="files" aria-hidden="true">
+              <li>report/riepilogo-sessione.docx</li>
+              <li>attivita/order_entry/…/activity.json</li>
+              <li>da-verificare/</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="uses" id="uses">
+        <h2 data-i18n="uses.title">A cosa serve</h2>
+        <ul class="chips">
+          <li data-i18n="uses.1">Inserimento ordini</li>
+          <li data-i18n="uses.2">Gestione documenti</li>
+          <li data-i18n="uses.3">Ricerca codici articolo</li>
+          <li data-i18n="uses.4">Email e risposte</li>
+          <li data-i18n="uses.5">Controlli e verifiche</li>
+          <li data-i18n="uses.6">Eccezioni di processo</li>
+        </ul>
+      </section>
+
+      <section class="local card wide" id="local">
+        <h2 data-i18n="local.title">Locale per scelta</h2>
+        <p data-i18n="local.text">
+          Octo registra e analizza sul tuo computer. Il modello locale è Ollama in loopback; il
+          cloud parte solo se lo chiedi, per una sessione, con il testo delle schermate approvate e
+          mai con le immagini. Codice aperto con licenza GPL-3.0.
+        </p>
+        <p class="links">
+          <a
+            href="https://github.com/francemazzi/octo_core/blob/main/docs/security/data-modes.md"
+            rel="noopener"
+            ><span data-i18n="local.modes">Modalità dati</span></a
+          >
+          <a href="https://github.com/francemazzi/octo_core/blob/main/LICENSE" rel="noopener"
+            ><span data-i18n="local.license">Licenza</span></a
+          >
+        </p>
+      </section>
+
+      <section class="download" id="download">
+        <h2 data-i18n="download.title">Scarica Octo Core</h2>
+        <p class="sub" data-release-line>
+          <span data-i18n="download.sub" data-template>Versione {version} · {date}</span>
+        </p>
+        <div class="dl-cards">
+          <article class="dl-card" data-os-card="mac">
+            <h3>
+              <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M16.37 12.68c.02 2.9 2.55 3.87 2.58 3.88-.02.07-.4 1.38-1.33 2.73-.8 1.17-1.63 2.33-2.94 2.35-1.28.03-1.7-.76-3.16-.76-1.47 0-1.93.74-3.14.79-1.27.05-2.23-1.26-3.04-2.42-1.65-2.38-2.9-6.72-1.21-9.65.84-1.46 2.34-2.38 3.97-2.4 1.24-.03 2.41.83 3.17.83.76 0 2.18-1.03 3.68-.88.63.03 2.39.25 3.52 1.9-.09.06-2.1 1.23-2.08 3.63M13.91 5.74c.67-.81 1.12-1.94 1-3.07-.97.04-2.13.64-2.83 1.45-.62.72-1.16 1.87-1.02 2.97 1.08.08 2.18-.55 2.85-1.35"
+                />
+              </svg>
+              macOS
+            </h3>
+            <a
+              class="dl-row"
+              data-target="mac-arm64"
+              href="https://github.com/francemazzi/octo_core/releases/latest"
+              rel="noopener"
+            >
+              <strong>Apple Silicon</strong><code data-file>.dmg</code><span data-size></span>
+            </a>
+            <a
+              class="dl-row"
+              data-target="mac-x64"
+              href="https://github.com/francemazzi/octo_core/releases/latest"
+              rel="noopener"
+            >
+              <strong>Intel</strong><code data-file>.dmg</code><span data-size></span>
+            </a>
+            <p class="muted" data-i18n="download.mac.note">
+              Firmato con Developer ID e notarizzato da Apple.
+            </p>
+          </article>
+          <article class="dl-card" data-os-card="win">
+            <h3>
+              <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M3 3h8.5v8.5H3zm9.5 0H21v8.5h-8.5zM3 12.5h8.5V21H3zm9.5 0H21V21h-8.5z"
+                />
+              </svg>
+              Windows
+            </h3>
+            <a
+              class="dl-row"
+              data-target="win-x64"
+              href="https://github.com/francemazzi/octo_core/releases/latest"
+              rel="noopener"
+            >
+              <strong>x64</strong><code data-file>.zip</code><span data-size></span>
+            </a>
+            <a
+              class="dl-row"
+              data-target="win-arm64"
+              href="https://github.com/francemazzi/octo_core/releases/latest"
+              rel="noopener"
+            >
+              <strong>ARM64</strong><code data-file>.zip</code><span data-size></span>
+            </a>
+            <p class="muted" data-i18n="download.win.note">
+              Firmato con Azure Artifact Signing. SmartScreen può avvisare finché la firma non ha
+              reputazione.
+            </p>
+          </article>
+          <article class="dl-card" data-os-card="linux">
+            <h3>
+              <img src="assets/tux.svg" width="28" height="32" alt="" />
+              Linux
+            </h3>
+            <a
+              class="dl-row"
+              data-target="linux-x64"
+              href="https://github.com/francemazzi/octo_core/releases/latest"
+              rel="noopener"
+            >
+              <strong>x64</strong><code data-file>.zip</code><span data-size></span>
+            </a>
+            <a
+              class="dl-row"
+              data-target="linux-arm64"
+              href="https://github.com/francemazzi/octo_core/releases/latest"
+              rel="noopener"
+            >
+              <strong>ARM64</strong><code data-file>.zip</code><span data-size></span>
+            </a>
+            <p class="muted" data-i18n="download.linux.note">
+              Archivio zip, senza firma: confronta l'hash.
+            </p>
+          </article>
+        </div>
+        <p class="links">
+          <a
+            data-asset-link="SHA256SUMS.txt"
+            href="https://github.com/francemazzi/octo_core/releases/latest"
+            rel="noopener"
+            ><span data-i18n="download.checksums">Verifica i file con SHA256SUMS.txt</span></a
+          >
+          <a
+            data-asset-link="windows-signing-report-win-x64.json"
+            href="https://github.com/francemazzi/octo_core/releases/latest"
+            rel="noopener"
+            ><span data-i18n="download.reports">Report di firma Windows</span></a
+          >
+          <a
+            data-release-link
+            href="https://github.com/francemazzi/octo_core/releases/latest"
+            rel="noopener"
+            ><span data-i18n="download.release">Note di rilascio su GitHub</span></a
+          >
+        </p>
+        <p class="muted center" data-i18n="download.requirements">
+          Per leggere le schermate Octo ha bisogno di Ollama e del modello OCR locale sullo stesso
+          computer.
+        </p>
+      </section>
+
+      <section class="faq" id="faq">
+        <h2 data-i18n="faq.title">Domande frequenti</h2>
+        <details>
+          <summary data-i18n="faq.1.q">Cosa lascia il mio computer?</summary>
+          <p data-i18n="faq.1.a">
+            Niente, di default. Registrazione, lettura del testo, analisi ed export avvengono in
+            locale. Un modello remoto riceve solo il testo delle schermate che approvi, per una
+            sessione, dopo una conferma esplicita; le immagini non partono mai.
+          </p>
+        </details>
+        <details>
+          <summary data-i18n="faq.2.q">Serve un account?</summary>
+          <p data-i18n="faq.2.a">
+            No. Octo non ha login né account cloud. L'analisi remota facoltativa usa una tua chiave
+            OpenRouter o Anthropic, salvata nel keystore del sistema.
+          </p>
+        </details>
+        <details>
+          <summary data-i18n="faq.3.q">Cosa serve per leggere le schermate?</summary>
+          <p data-i18n="faq.3.a">
+            Ollama in esecuzione su questo computer con un modello di visione locale (il modello
+            OCR) e un modello chat locale. Senza, Octo registra comunque, ma le attività non vengono
+            riconosciute.
+          </p>
+        </details>
+        <details>
+          <summary data-i18n="faq.4.q">Perché Windows mostra un avviso?</summary>
+          <p data-i18n="faq.4.a">
+            I pacchetti Windows sono firmati, ma una firma nuova non ha ancora reputazione per
+            SmartScreen. Controlla l'hash con SHA256SUMS.txt, poi scegli Ulteriori informazioni →
+            Esegui comunque.
+          </p>
+        </details>
+        <details>
+          <summary data-i18n="faq.5.q">È gratis?</summary>
+          <p data-i18n="faq.5.a">
+            Sì. Octo Core è software libero con licenza GPL-3.0-or-later: puoi usarlo, studiarlo,
+            modificarlo e ridistribuirlo alle stesse condizioni.
+          </p>
+        </details>
+        <details>
+          <summary data-i18n="faq.6.q">Dove sono i sorgenti?</summary>
+          <p data-i18n="faq.6.a">
+            Su GitHub, con la roadmap, i gate di integrazione di ogni fase e i documenti di
+            sicurezza.
+          </p>
+        </details>
+      </section>
+
+      <section class="final">
+        <h2 data-i18n="cta.title">Documenta il lavoro prima di automatizzarlo</h2>
+        <p class="sub" data-i18n="cta.sub">
+          Una sessione autorizzata, poche domande, un report verificabile.
+        </p>
+        <div class="cta">
+          <a class="pill solid big" href="#download" data-primary-download-secondary
+            ><span data-download-label-secondary>Scarica</span></a
+          >
+          <a class="pill ghost big" href="https://github.com/francemazzi/octo_core" rel="noopener"
+            >GitHub</a
+          >
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>
+        <a href="https://github.com/francemazzi/octo_core" rel="noopener"
+          ><span data-i18n="footer.source">Sorgenti su GitHub</span></a
+        >
+        <a href="https://github.com/francemazzi/octo_core/blob/main/LICENSE" rel="noopener"
+          ><span data-i18n="footer.license">Licenza GPL-3.0-or-later</span></a
+        >
+        <a href="https://github.com/francemazzi/octo_core/tree/main/docs" rel="noopener"
+          ><span data-i18n="footer.docs">Documentazione</span></a
+        >
+      </p>
+      <p class="muted">
+        <span data-i18n="footer.made"
+          >Octo Core è software libero. I marchi appartengono ai rispettivi proprietari.</span
+        >
+        <span data-i18n="footer.tux">Tux di Larry Ewing.</span>
+      </p>
+    </footer>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
