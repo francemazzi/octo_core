@@ -1,6 +1,6 @@
 import { MODEL_CALL_TIMEOUT_MS } from "@octo/contracts";
 import { OctoError } from "../errors.js";
-import type { ModelAdapter } from "./model-adapter.js";
+import type { ChatTurn, ConverseReply, ModelAdapter } from "./model-adapter.js";
 import { EPISODES_PROMPT_SCHEMA, EPISODES_SYSTEM_PROMPT, userPrompt } from "./prompt.js";
 import { readReply } from "./reply.js";
 
@@ -35,53 +35,63 @@ type CompletionBody = {
 export function createOpenRouterAdapter(options: OpenRouterOptions): ModelAdapter {
   const model = options.model ?? DEFAULT_OPENROUTER_MODEL;
   const maxTokens = options.maxTokens ?? DEFAULT_OPENROUTER_MAX_TOKENS;
+
+  /** One JSON-only chat completion, from providers that keep no data. */
+  async function complete(system: string, messages: ChatTurn[]): Promise<ConverseReply> {
+    if (options.apiKey.length === 0) {
+      throw new OctoError("model_unavailable", "OPENROUTER_API_KEY is missing");
+    }
+    const fetchImpl = options.fetchImpl ?? fetch;
+    const body = await transient(async () => {
+      const response = await fetchImpl(
+        `${options.baseUrl ?? OPENROUTER_BASE_URL}/chat/completions`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${options.apiKey}`,
+            "content-type": "application/json",
+            "x-title": "Octo Core",
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: maxTokens,
+            temperature: 0,
+            response_format: { type: "json_object" },
+            provider: { data_collection: "deny", zdr: true, require_parameters: true },
+            messages: [{ role: "system", content: system }, ...messages],
+          }),
+          signal: AbortSignal.timeout(MODEL_CALL_TIMEOUT_MS),
+        },
+      );
+      if (response.status === 429 || response.status >= 500) {
+        throw new OctoError("remote_unreachable", `openrouter ${response.status}`);
+      }
+      if (!response.ok) throw new Error(`openrouter ${response.status}`);
+      return (await response.json()) as CompletionBody;
+    });
+    return {
+      model: body.model ?? model,
+      content: body.choices?.[0]?.message?.content ?? "",
+      usage: usageOf(body.usage),
+    };
+  }
+
   return {
     provider: "openrouter",
     locality: "remote",
     promptSchema: EPISODES_PROMPT_SCHEMA,
     status: () => Promise.resolve({ up: options.apiKey.length > 0, model }),
     async interpret(evidence, known) {
-      if (options.apiKey.length === 0) {
-        throw new OctoError("model_unavailable", "OPENROUTER_API_KEY is missing");
-      }
-      const fetchImpl = options.fetchImpl ?? fetch;
-      const body = await transient(async () => {
-        const response = await fetchImpl(
-          `${options.baseUrl ?? OPENROUTER_BASE_URL}/chat/completions`,
-          {
-            method: "POST",
-            headers: {
-              authorization: `Bearer ${options.apiKey}`,
-              "content-type": "application/json",
-              "x-title": "Octo Core",
-            },
-            body: JSON.stringify({
-              model,
-              max_tokens: maxTokens,
-              temperature: 0,
-              response_format: { type: "json_object" },
-              provider: { data_collection: "deny", zdr: true, require_parameters: true },
-              messages: [
-                { role: "system", content: EPISODES_SYSTEM_PROMPT },
-                { role: "user", content: userPrompt(evidence, known) },
-              ],
-            }),
-            signal: AbortSignal.timeout(MODEL_CALL_TIMEOUT_MS),
-          },
-        );
-        if (response.status === 429 || response.status >= 500) {
-          throw new OctoError("remote_unreachable", `openrouter ${response.status}`);
-        }
-        if (!response.ok) throw new Error(`openrouter ${response.status}`);
-        return (await response.json()) as CompletionBody;
-      });
-      const content = body.choices?.[0]?.message?.content ?? "";
+      const reply = await complete(EPISODES_SYSTEM_PROMPT, [
+        { role: "user", content: userPrompt(evidence, known) },
+      ]);
       return {
-        model: body.model ?? model,
-        ...readReply(content, evidence, known),
-        usage: usageOf(body.usage),
+        model: reply.model,
+        ...readReply(reply.content, evidence, known),
+        usage: reply.usage,
       };
     },
+    converse: complete,
   };
 }
 

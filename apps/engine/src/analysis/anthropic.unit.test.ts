@@ -99,3 +99,32 @@ describe("Anthropic adapter", () => {
     });
   });
 });
+
+describe("Anthropic conversation", () => {
+  it("sends the system prompt and every turn, and returns the text with usage", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        ...message,
+        content: [{ type: "text", text: '{"answer":"Sì."}' }],
+      }),
+    );
+    const adapter = createAnthropicAdapter({ apiKey: KEY, fetchImpl, model: "claude-test" });
+    const reply = await adapter.converse?.("assistant rules", [
+      { role: "user", content: "prima" },
+      { role: "assistant", content: "risposta" },
+      { role: "user", content: "seconda" },
+    ]);
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
+    expect(body.system).toBe("assistant rules");
+    expect(body.messages).toEqual([
+      { role: "user", content: "prima" },
+      { role: "assistant", content: "risposta" },
+      { role: "user", content: "seconda" },
+    ]);
+    expect(reply).toEqual({
+      model: "claude-test",
+      content: '{"answer":"Sì."}',
+      usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+    });
+  });
+});

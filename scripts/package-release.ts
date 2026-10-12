@@ -1,8 +1,19 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import packager from "@electron/packager";
+import { runLicenseCheck } from "./gates/check-licenses.js";
+import { createDmg, unsignedNotice, writeChecksums, zipFolder } from "./release/artifacts.js";
+import { writeIcons } from "./release/icons.js";
+import {
+  notarize,
+  notarizeMacApp,
+  notaryCredentials,
+  notaryPreflight,
+  staple,
+} from "./release/notarize-mac.js";
+import { assessWithGatekeeper, macIdentity, signDmg, signMacApp } from "./release/sign-mac.js";
+import { signWindowsFolder, windowsSigningConfigured } from "./release/sign-win.js";
 
 const root = process.cwd();
 const desktopDir = join(root, "apps/desktop");
@@ -11,7 +22,6 @@ const desktopPackage = JSON.parse(readFileSync(join(desktopDir, "package.json"),
 };
 const version = desktopPackage.version;
 const outDir = join(root, "release", version);
-const iconDir = join(tmpdir(), "octo-icons");
 
 const targets = [
   { platform: "darwin", arch: "arm64", label: "mac-arm64" },
@@ -21,102 +31,54 @@ const targets = [
   { platform: "linux", arch: "x64", label: "linux-x64" },
   { platform: "linux", arch: "arm64", label: "linux-arm64" },
 ] as const;
+type Target = (typeof targets)[number];
 
-const requested = new Set(process.argv.slice(2));
+const args = process.argv.slice(2);
+const skipBuild = args.includes("--no-build");
+const requested = new Set(args.filter((arg) => !arg.startsWith("--")));
 const selected = targets.filter((target) => requested.size === 0 || requested.has(target.label));
-if (selected.length === 0) {
-  throw new Error(`unknown target: ${process.argv.slice(2).join(", ")}`);
+if (selected.length === 0) throw new Error(`unknown target: ${[...requested].join(", ")}`);
+const needsMac = selected.some((target) => target.platform === "darwin");
+if (needsMac && process.platform !== "darwin") {
+  throw new Error("macOS targets must be packaged on macOS (codesign, notarytool, hdiutil)");
 }
 
-function run(command: string, args: string[]): void {
-  execFileSync(command, args, { cwd: root, stdio: "inherit" });
+function run(command: string, commandArgs: string[]): void {
+  execFileSync(command, commandArgs, { cwd: root, stdio: "inherit" });
 }
 
-function writeIcons(): string {
-  rmSync(iconDir, { recursive: true, force: true });
-  mkdirSync(iconDir, { recursive: true });
-  const png = join(iconDir, "icon.png");
-  execFileSync("sips", ["-z", "512", "512", join(root, "logo_octo.png"), "--out", png], {
-    stdio: "ignore",
-  });
-  const iconset = join(iconDir, "icon.iconset");
-  mkdirSync(iconset);
-  for (const size of [16, 32, 64, 128, 256, 512]) {
-    execFileSync(
-      "sips",
-      ["-z", String(size), String(size), png, "--out", join(iconset, `icon_${size}x${size}.png`)],
-      { stdio: "inherit" },
-    );
-    const retina = size * 2;
-    if (retina <= 512) {
-      execFileSync(
-        "sips",
-        [
-          "-z",
-          String(retina),
-          String(retina),
-          png,
-          "--out",
-          join(iconset, `icon_${size}x${size}@2x.png`),
-        ],
-        { stdio: "inherit" },
-      );
-    }
-  }
-  execFileSync("iconutil", ["-c", "icns", iconset, "-o", join(iconDir, "icon.icns")], {
-    stdio: "ignore",
-  });
-  const pngBytes = readFileSync(png);
-  const header = Buffer.alloc(6);
-  header.writeUInt16LE(0, 0);
-  header.writeUInt16LE(1, 2);
-  header.writeUInt16LE(1, 4);
-  const entry = Buffer.alloc(16);
-  entry.writeUInt8(0, 0);
-  entry.writeUInt8(0, 1);
-  entry.writeUInt16LE(1, 4);
-  entry.writeUInt16LE(32, 6);
-  entry.writeUInt32LE(pngBytes.length, 8);
-  entry.writeUInt32LE(22, 12);
-  writeFileSync(join(iconDir, "icon.ico"), Buffer.concat([header, entry, pngBytes]));
-  return join(iconDir, "icon");
+if (!skipBuild) {
+  run("pnpm", ["--filter", "@octo/desktop", "build"]);
+  run("pnpm", ["--filter", "@octo/desktop", "bundle-engine"]);
 }
 
-function zip(source: string, destination: string): void {
-  execFileSync("ditto", ["-c", "-k", "--keepParent", "--norsrc", source, destination], {
-    stdio: "inherit",
-    env: { ...process.env, COPYFILE_DISABLE: "1" },
-  });
-}
-
-function dmg(appPath: string, destination: string): void {
-  execFileSync(
-    "hdiutil",
-    [
-      "create",
-      "-volname",
-      "Octo Core",
-      "-srcfolder",
-      appPath,
-      "-ov",
-      "-format",
-      "UDZO",
-      destination,
-    ],
-    { stdio: "inherit" },
-  );
-}
-
-run("pnpm", ["--filter", "@octo/desktop", "build"]);
-run("pnpm", ["--filter", "@octo/desktop", "bundle-engine"]);
-
-const icon = writeIcons();
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
-const artifacts: string[] = [];
+// Rights before binaries: the notices ship inside every package and next to it.
+const noticesRelative = `release/${version}/THIRD-PARTY-NOTICES.txt`;
+const licenses = runLicenseCheck({ root, out: noticesRelative });
+if (licenses.problems.length > 0) {
+  throw new Error(`licenses outside the allowlist:\n${licenses.problems.join("\n")}`);
+}
+const licensePath = join(outDir, "LICENSE");
+copyFileSync(join(root, "LICENSE"), licensePath);
+const noticesPath = join(root, noticesRelative);
 
-for (const target of selected) {
+const icon = writeIcons(root);
+if (!icon) process.stderr.write("icons are built on macOS only; packages keep Electron's icon\n");
+
+const identity = needsMac ? macIdentity() : undefined;
+const notary = identity ? notaryCredentials() : undefined;
+if (notary) notaryPreflight(notary);
+const windowsSigning = selected.some((t) => t.platform === "win32") && windowsSigningConfigured();
+
+const artifacts: string[] = [];
+const signed: string[] = [];
+const unsigned: string[] = [];
+const notes: string[] = [];
+
+async function packageTarget(target: Target): Promise<string> {
   const packaged = await packager({
     dir: desktopDir,
     name: "Octo Core",
@@ -138,7 +100,7 @@ for (const target of selected) {
           },
         }
       : {}),
-    extraResource: [join(desktopDir, "dist/engine.mjs")],
+    extraResource: [join(desktopDir, "dist/engine.mjs"), licensePath, noticesPath],
     ignore: (filePath) => {
       const relative = filePath.replaceAll("\\", "/");
       if (relative === "" || relative === "/package.json" || relative === "/dist") return false;
@@ -149,29 +111,76 @@ for (const target of selected) {
   });
   const folder = packaged[0];
   if (!folder) throw new Error(`empty package for ${target.label}`);
-  if (target.platform === "darwin") {
-    const appPath = join(folder, "Octo Core.app");
-    execFileSync("plutil", [
-      "-replace",
-      "CFBundleDisplayName",
-      "-string",
-      "Octo",
-      join(appPath, "Contents", "Info.plist"),
-    ]);
-    rmSync(join(appPath, "Contents", "Resources", "electron.icns"), { force: true });
-  }
-  const zipPath = join(outDir, `OctoCore-${version}-${target.label}.zip`);
-  zip(folder, zipPath);
-  artifacts.push(zipPath);
-  if (target.platform === "darwin") {
-    const dmgPath = join(outDir, `OctoCore-${version}-${target.label}.dmg`);
-    dmg(join(folder, "Octo Core.app"), dmgPath);
-    artifacts.push(dmgPath);
-  }
+  return folder;
 }
 
-writeFileSync(
-  join(outDir, "UNSIGNED.txt"),
-  `Octo Core ${version} is not code-signed. macOS and Windows will show a security warning.\n`,
+function finishWindows(folder: string, label: string): void {
+  if (!windowsSigning) {
+    unsigned.push(label);
+    return;
+  }
+  const report = signWindowsFolder(folder, join(outDir, `windows-signing-report-${label}.json`));
+  notes.push(`${label}: ${report.files.length} binaries signed with ${report.tool}`);
+  signed.push(label);
+}
+
+/** Display name, icon cleanup, then signature and notarization of the app bundle itself. */
+function prepareMacApp(folder: string, label: string): string {
+  const appPath = join(folder, "Octo Core.app");
+  execFileSync("plutil", [
+    "-replace",
+    "CFBundleDisplayName",
+    "-string",
+    "Octo",
+    join(appPath, "Contents", "Info.plist"),
+  ]);
+  rmSync(join(appPath, "Contents", "Resources", "electron.icns"), { force: true });
+  if (identity) {
+    signMacApp(appPath, identity);
+    if (notary) notarizeMacApp(appPath, notary, outDir, `${label}-app`);
+  }
+  return appPath;
+}
+
+/** DMG from the stapled app, signed and notarized on its own, then assessed by Gatekeeper. */
+function finishMac(appPath: string, label: string): void {
+  const dmgPath = join(outDir, `OctoCore-${version}-${label}.dmg`);
+  createDmg(appPath, dmgPath);
+  artifacts.push(dmgPath);
+  if (!identity) {
+    unsigned.push(label);
+    return;
+  }
+  signDmg(dmgPath, identity);
+  if (notary) {
+    notarize(dmgPath, notary, outDir, `${label}-dmg`);
+    staple(dmgPath);
+  }
+  const verdict = assessWithGatekeeper(appPath, dmgPath);
+  notes.push(...verdict.lines.map((line) => `${label} ${line}`));
+  if (!notary) {
+    unsigned.push(`${label} (firmato, non notarizzato)`);
+    return;
+  }
+  if (!verdict.accepted) throw new Error(`Gatekeeper rejected ${label} after notarization`);
+  signed.push(label);
+}
+
+for (const target of selected) {
+  const folder = await packageTarget(target);
+  if (target.platform === "win32") finishWindows(folder, target.label);
+  const appPath = target.platform === "darwin" ? prepareMacApp(folder, target.label) : undefined;
+  const zipPath = join(outDir, `OctoCore-${version}-${target.label}.zip`);
+  zipFolder(folder, zipPath);
+  artifacts.push(zipPath);
+  if (appPath) finishMac(appPath, target.label);
+  if (target.platform === "linux")
+    notes.push(`${target.label}: no signature by design, verify SHA256SUMS.txt`);
+}
+
+const checksums = writeChecksums(outDir, artifacts);
+if (unsigned.length > 0)
+  writeFileSync(join(outDir, "UNSIGNED.txt"), unsignedNotice(version, unsigned));
+process.stdout.write(
+  `${[...artifacts, checksums, licensePath, noticesPath].join("\n")}\n${notes.join("\n")}${notes.length ? "\n" : ""}signed: ${signed.join(", ") || "none"}\nunsigned: ${unsigned.join(", ") || "none"}\n`,
 );
-process.stdout.write(`${artifacts.join("\n")}\n`);

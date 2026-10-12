@@ -135,3 +135,28 @@ describe("local Ollama boundary", () => {
     expect(ollamaProfile({ base: "http://localhost:11434" }).models.local?.locality).toBe("local");
   });
 });
+
+describe("Ollama conversation", () => {
+  it("talks to the chosen local model in JSON mode with the given system prompt", async () => {
+    const bodies: string[] = [];
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/tags")) return json({ models: [{ name: "llama3.1:8b" }] });
+      bodies.push(String(init?.body));
+      return json({ message: { content: '{"answer":"Ciao."}' } });
+    }) as typeof fetch;
+    const adapter = createOllamaAdapter({ base: BASE, fetchImpl });
+    const reply = await adapter.converse?.("assistant rules", [
+      { role: "user", content: "domanda" },
+    ]);
+    expect(reply).toEqual({ model: "llama3.1:8b", content: '{"answer":"Ciao."}' });
+    expect(JSON.parse(bodies[0] ?? "{}")).toMatchObject({
+      model: "llama3.1:8b",
+      format: "json",
+      messages: [
+        { role: "system", content: "assistant rules" },
+        { role: "user", content: "domanda" },
+      ],
+    });
+  });
+});

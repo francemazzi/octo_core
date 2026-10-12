@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { MAX_ANALYSIS_BATCHES, MAX_BATCH_EVIDENCE, type ModelOutput } from "@octo/contracts";
 import { OctoError } from "../errors.js";
 import type { Sql } from "../storage/db.js";
-import { knownActivities, mergeOutputs, planBatches, textCharsFor } from "./batches.js";
+import { knownActivities, mergeOutputs, planBatches } from "./batches.js";
 import type {
   AnalysisProfile,
   KnownActivity,
@@ -10,7 +10,8 @@ import type {
   ModelEvidence,
   ModelReply,
 } from "./model-adapter.js";
-import { acceptModelOutput, evidenceIdsForMode, type DataMode } from "./policy.js";
+import { auditNetwork, perimeterEvidence, reservedByActivities, toEvidence } from "./perimeter.js";
+import { acceptModelOutput, type DataMode } from "./policy.js";
 import { recordRun, type RunOutcome } from "./runs.js";
 
 /** A rejected reply gets one more try, unless the first call was already slow. */
@@ -43,14 +44,6 @@ export type InterpretDeps = {
   profile: AnalysisProfile;
   readText: (assetId: string) => string;
   nowWall: () => string;
-};
-
-type EvidenceRow = {
-  id: string;
-  source_id: string;
-  start_ms: number;
-  asset_id: string | null;
-  review_state: string;
 };
 
 type Input = { sessionId: string; mode: DataMode; windowMs: number };
@@ -106,7 +99,7 @@ export async function interpretSession(
   let model: string | null = null;
   for (const [index, batch] of plan.batches.entries()) {
     const known = outputs.length > 0 ? knownActivities(mergeOutputs(outputs)) : [];
-    const evidence = toEvidence(deps, batch, known);
+    const evidence = toEvidence(deps, batch, reservedByActivities(known));
     const result = await callWithRetry({ deps, adapter, input, coverage, index, evidence, known });
     model = result.model ?? model;
     if (result.output) outputs.push(result.output);
@@ -121,47 +114,6 @@ export async function interpretSession(
     model,
     reason: "accepted",
   };
-}
-
-/** Valid evidence of the session that the mode allows to reach this adapter, in time order. */
-function perimeterEvidence(db: Sql, adapter: ModelAdapter, input: Input): EvidenceRow[] {
-  const rows = db
-    .prepare(
-      `SELECT id, source_id, start_ms, asset_id, review_state FROM evidence
-       WHERE session_id = ? AND availability = 'valid' ORDER BY start_ms, id`,
-    )
-    .all(input.sessionId) as EvidenceRow[];
-  if (adapter.locality === "local") return rows;
-  const allowed = new Set(
-    evidenceIdsForMode(
-      input.mode,
-      input.sessionId,
-      rows.map((row) => ({
-        id: row.id,
-        reviewState: row.review_state,
-        sessionId: input.sessionId,
-      })),
-    ),
-  );
-  return rows.filter((row) => allowed.has(row.id));
-}
-
-function toEvidence(
-  deps: InterpretDeps,
-  batch: EvidenceRow[],
-  known: KnownActivity[],
-): ModelEvidence[] {
-  const reserved = known.reduce(
-    (sum, activity) => sum + activity.activityType.length + (activity.label?.length ?? 0) + 40,
-    0,
-  );
-  const textChars = textCharsFor(batch.length, reserved);
-  return batch.map((row) => ({
-    id: row.id,
-    sourceId: row.source_id,
-    startMs: row.start_ms,
-    text: row.asset_id ? deps.readText(row.asset_id).slice(0, textChars) : "",
-  }));
 }
 
 async function callWithRetry(call: Call): Promise<CallResult> {
@@ -253,28 +205,4 @@ function assertNoIssues(reply: ModelReply): void {
   if (issues?.duplicateEvidence.length) {
     throw new OctoError("duplicate_evidence", issues.duplicateEvidence.slice(0, 5).join(", "));
   }
-}
-
-/** Written before each remote call: what leaves the computer, and to whom. */
-function auditNetwork(
-  deps: InterpretDeps,
-  sessionId: string,
-  ids: string[],
-  adapter: ModelAdapter,
-) {
-  deps.db
-    .prepare(
-      `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
-       VALUES (?, ?, ?, 'network', ?)`,
-    )
-    .run(
-      randomUUID(),
-      sessionId,
-      deps.nowWall(),
-      JSON.stringify({
-        evidenceIds: ids,
-        provider: adapter.provider,
-        ...(adapter.workspaceId ? { workspaceId: adapter.workspaceId } : {}),
-      }),
-    );
 }

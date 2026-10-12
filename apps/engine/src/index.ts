@@ -1,7 +1,18 @@
 export { acceptModelOutput } from "./analysis/policy.js";
 export { threadIdFor } from "./analysis/graph.js";
-export { fixtureProfile } from "./analysis/fixture-adapter.js";
-export type { AnalysisProfile, ModelAdapter } from "./analysis/model-adapter.js";
+export {
+  createFixtureAdapter,
+  fixtureProfile,
+  oracleTimeline,
+} from "./analysis/fixture-adapter.js";
+export type { ChatScript } from "./analysis/fixture-adapter.js";
+export type {
+  AnalysisProfile,
+  ChatTurn,
+  ConverseReply,
+  ModelAdapter,
+} from "./analysis/model-adapter.js";
+export { CHAT_PROMPT_SCHEMA, CHAT_SYSTEM_PROMPT } from "./chat/prompt.js";
 export { ollamaProfile } from "./analysis/ollama.js";
 export { frameTimeline } from "./analysis/model-adapter.js";
 export { createOpenRouterAdapter } from "./analysis/openrouter.js";

@@ -20,6 +20,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm scan:secrets
+      - run: pnpm check:licenses
       - run: pnpm test:unit
       - run: xvfb-run -a pnpm test:integration
       - run: pnpm test:replay

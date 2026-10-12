@@ -93,3 +93,35 @@ describe("OpenRouter adapter", () => {
     });
   });
 });
+
+describe("OpenRouter conversation", () => {
+  it("keeps the JSON-only, no-data-retention request for every turn", async () => {
+    const captured: Captured[] = [];
+    const adapter = createOpenRouterAdapter({
+      apiKey: "test-key",
+      model: "vendor/model",
+      fetchImpl: stub(
+        {
+          model: "vendor/model",
+          choices: [{ message: { content: '{"answer":"Un ordine."}' } }],
+          usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
+        },
+        captured,
+      ),
+    });
+    const reply = await adapter.converse?.("assistant rules", [{ role: "user", content: "ciao" }]);
+    expect(captured[0]?.body).toMatchObject({
+      response_format: { type: "json_object" },
+      provider: { data_collection: "deny", zdr: true },
+      messages: [
+        { role: "system", content: "assistant rules" },
+        { role: "user", content: "ciao" },
+      ],
+    });
+    expect(reply).toEqual({
+      model: "vendor/model",
+      content: '{"answer":"Un ordine."}',
+      usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
+    });
+  });
+});

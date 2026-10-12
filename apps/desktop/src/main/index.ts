@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { app } from "electron";
 import type { UiSource } from "../shared/ui-state.js";
+import { createChatControl } from "./chat.js";
 import { createEngineClient } from "./engine-client.js";
 import { registerIpc } from "./ipc.js";
 import { parseId } from "./questions.js";
@@ -9,6 +10,7 @@ import { createScreenCapture, orderedDisplays, screenPermission } from "./screen
 import { keystoreBox } from "./secret-box.js";
 import { createSessionControl, type SessionControl } from "./session-control.js";
 import { createSettingsStore } from "./settings-store.js";
+import { createUpdater } from "./updater.js";
 import { createWindows } from "./windows.js";
 
 declare const __dirname: string;
@@ -69,6 +71,17 @@ app.whenReady().then(async () => {
       session.publish();
     },
   });
+  const updater = createUpdater({
+    publish: (update) => {
+      session.state.update = update;
+      session.publish();
+    },
+  });
+  const chat = createChatControl({
+    request,
+    state: () => session.state,
+    remoteBusy: () => remote.busy(),
+  });
   if (process.platform === "darwin") app.dock?.setIcon(windows.logo());
   registerIpc({
     "octo:getState": () => session.state,
@@ -93,6 +106,9 @@ app.whenReady().then(async () => {
       if (remote.busy()) throw new Error("Attendi il salvataggio delle impostazioni.");
       return session.analyzeRemote(payload);
     },
+    "octo:installUpdate": () => updater.install(),
+    "octo:chatSend": (payload) => chat.send(payload),
+    "octo:chatHistory": (payload) => chat.history(payload),
   });
 
   const dashboard = windows.createDashboard();
@@ -115,6 +131,8 @@ app.whenReady().then(async () => {
     .catch((error: unknown) => process.stderr.write(`remote model not set: ${String(error)}\n`));
   const note = await modelNote().catch(() => "Ollama spento.");
   await session.boot(note);
+  // Only an installed app looks for updates; `pnpm start` runs the version of the checkout.
+  if (app.isPackaged) void updater.check();
 });
 
 app.on("before-quit", (event) => {

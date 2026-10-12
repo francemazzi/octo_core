@@ -1,4 +1,6 @@
 import type {
+  ChatMessage,
+  ChatMode,
   RemoteProvider,
   RemoteModelConfig,
   SessionDetail,
@@ -35,7 +37,24 @@ export type RemoteAnalysisInput = {
   workspaceId?: string;
 };
 
+/** A newer release, as the dashboard shows it: `ready` means the package is downloaded and opened. */
+export type UiUpdate = {
+  status: "none" | "available" | "downloading" | "ready" | "error";
+  version: string | null;
+  /** Download progress, 0 to 100, or null while unknown. */
+  progress: number | null;
+  message: string | null;
+};
+
 export type RemoteInput = RemoteModelConfig;
+
+/** One question to the session assistant; `remote` names the confirmed destination when cloud. */
+export type ChatSendInput = {
+  sessionId: string;
+  text: string;
+  mode: ChatMode;
+  remote?: Omit<RemoteAnalysisInput, "sessionId">;
+};
 
 /** Everything the dashboard and the corner mascot render; main owns it and publishes copies. */
 export type UiState = {
@@ -50,6 +69,7 @@ export type UiState = {
   sessions: SessionListItem[];
   questions: SessionQuestion[];
   remote: UiRemote;
+  update: UiUpdate;
   /** Set when the dashboard should show a session (mascot click, new session, new question). */
   focus: { sessionId: string | null; at: number } | null;
 };
@@ -77,6 +97,7 @@ export const initialUiState: UiState = {
     available: false,
     problem: null,
   },
+  update: { status: "none", version: null, progress: null, message: null },
   focus: null,
 };
 
@@ -99,6 +120,9 @@ export const OCTO_CHANNELS = [
   "octo:removeRemote",
   "octo:selectRemote",
   "octo:analyzeRemote",
+  "octo:installUpdate",
+  "octo:chatSend",
+  "octo:chatHistory",
 ] as const;
 
 export type OctoChannel = (typeof OCTO_CHANNELS)[number];
@@ -121,5 +145,10 @@ export interface OctoBridge {
   selectRemote(provider: RemoteProvider): Promise<string | null>;
   /** Approves the evidence of a stopped session and analyses it with the remote model. */
   analyzeRemote(input: RemoteAnalysisInput): Promise<UiState>;
+  /** Downloads the new release for this computer and opens it. */
+  installUpdate(): Promise<void>;
+  /** Asks the session assistant; resolves with its answer once stored. */
+  chatSend(input: ChatSendInput): Promise<ChatMessage>;
+  chatHistory(sessionId: string): Promise<ChatMessage[]>;
   onState(callback: (state: UiState) => void): () => void;
 }

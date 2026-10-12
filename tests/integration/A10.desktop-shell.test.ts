@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -6,34 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { createEngine } from "@octo/engine";
-import { _electron as electron, type ElectronApplication, type Page } from "playwright";
+import type { ElectronApplication, Page } from "playwright";
 import { describe, expect, it } from "vitest";
+import { buildDesktop, launch } from "../helpers/desktop.js";
 import { startDemo } from "../helpers/engine.js";
 import { promptAliases } from "../helpers/model-network.js";
-
-/** On a fresh machine `require("electron")` first prints a download notice; the path is last. */
-function electronBinary(): string {
-  const output = execFileSync("node", ["-e", "process.stdout.write(require('electron'))"], {
-    cwd: join(process.cwd(), "apps/desktop"),
-    encoding: "utf8",
-  });
-  return output.trim().split("\n").at(-1) ?? output;
-}
-
-function launch(dataDir: string, env: NodeJS.ProcessEnv = {}): Promise<ElectronApplication> {
-  return electron.launch({
-    executablePath: electronBinary(),
-    args: [join(process.cwd(), "apps/desktop")],
-    env: {
-      ...process.env,
-      OCTO_DATA_DIR: dataDir,
-      OCTO_CAPTURE: "synthetic",
-      OCTO_MODEL: "off",
-      OCTO_REPO_ROOT: process.cwd(),
-      ...env,
-    },
-  });
-}
 
 type Received = {
   path: string;
@@ -120,10 +96,7 @@ async function mascotPage(app: ElectronApplication): Promise<Page> {
 
 describe("A10 desktop shell", () => {
   it("pauses from the corner logo, resumes, stops, and lists the session under Oggi", async () => {
-    execFileSync("pnpm", ["--filter", "@octo/desktop", "build"], {
-      cwd: process.cwd(),
-      stdio: "inherit",
-    });
+    buildDesktop();
     const dataDir = mkdtempSync(join(tmpdir(), "octo-a10-"));
     const app = await launch(dataDir);
     const page = await app.firstWindow();

@@ -33,13 +33,19 @@ describe("database migrations", () => {
       { id: "001" },
       { id: "002" },
       { id: "003" },
+      { id: "004" },
     ]);
     const columns = (table: string) =>
       (reopened.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(
         (column) => column.name,
       );
-    expect(columns("episodes")).toEqual(expect.arrayContaining(["label", "summary"]));
+    expect(columns("episodes")).toEqual(
+      expect.arrayContaining(["label", "summary", "operator_note"]),
+    );
     expect(columns("evidence")).toEqual(expect.arrayContaining(["approved_at", "approved_by"]));
+    expect(columns("chat_messages")).toEqual(
+      expect.arrayContaining(["role", "citations_json", "verified", "partial"]),
+    );
     reopened.close();
   });
 });

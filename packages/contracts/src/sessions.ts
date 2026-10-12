@@ -34,6 +34,8 @@ export const sessionEpisodeSchema = z.object({
   activityType: z.string(),
   durationMs: z.number().int().nonnegative(),
   reviewState: z.string(),
+  /** What the operator declared about the activity when answering a question. */
+  operatorNote: z.string().nullable(),
 });
 
 export const sessionDetailResultSchema = z.object({

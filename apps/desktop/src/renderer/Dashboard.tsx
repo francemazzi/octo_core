@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ActiveSession } from "./ActiveSession.js";
 import { SessionDetail } from "./SessionDetail.js";
 import { SessionSidebar } from "./SessionSidebar.js";
+import { UpdateBanner } from "./UpdateBanner.js";
 import { Settings } from "./Settings.js";
 import { defaultSelection } from "./session-format.js";
 import { useOctoState } from "./useOcto.js";
@@ -40,6 +41,7 @@ export function Dashboard() {
         onSettings={() => setSettingsOpen(true)}
       />
       <main className="content">
+        <UpdateBanner update={state.update} />
         <ActiveSession state={state} />
         {state.error ? (
           <p className="error" role="alert">

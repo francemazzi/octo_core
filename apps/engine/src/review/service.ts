@@ -42,8 +42,9 @@ export function splitEpisode(db: Sql, episodeId: string, atMs: number): string {
   const newId = `${episodeId}-b`;
   db.prepare(
     `INSERT INTO episodes (
-      id, session_id, activity_type, case_id, objective, review_state, duration_ms, label, summary
-    ) VALUES (?, ?, ?, NULL, ?, 'proposed', 0, ?, ?)`,
+      id, session_id, activity_type, case_id, objective, review_state, duration_ms, label, summary,
+      operator_note
+    ) VALUES (?, ?, ?, NULL, ?, 'proposed', 0, ?, ?, ?)`,
   ).run(
     newId,
     episode.session_id,
@@ -51,6 +52,7 @@ export function splitEpisode(db: Sql, episodeId: string, atMs: number): string {
     episode.objective,
     episode.label,
     episode.summary,
+    episode.operator_note,
   );
   const intervals = db
     .prepare("SELECT * FROM episode_intervals WHERE episode_id = ?")
@@ -85,6 +87,11 @@ export function mergeEpisodes(db: Sql, episodeId: string, intoEpisodeId: string)
   db.prepare("UPDATE episode_intervals SET episode_id = ? WHERE episode_id = ?").run(
     intoEpisodeId,
     episodeId,
+  );
+  // The target keeps its own statement; the merged one survives only when the target has none.
+  db.prepare("UPDATE episodes SET operator_note = COALESCE(operator_note, ?) WHERE id = ?").run(
+    source.operator_note,
+    intoEpisodeId,
   );
   db.prepare("DELETE FROM episodes WHERE id = ?").run(episodeId);
   refreshDuration(db, intoEpisodeId);
@@ -123,12 +130,14 @@ type EpisodeRow = {
   objective: string;
   label: string | null;
   summary: string | null;
+  operator_note: string | null;
 };
 
 function mustEpisode(db: Sql, episodeId: string): EpisodeRow {
   const row = db
     .prepare(
-      "SELECT id, session_id, activity_type, objective, label, summary FROM episodes WHERE id = ?",
+      `SELECT id, session_id, activity_type, objective, label, summary, operator_note
+       FROM episodes WHERE id = ?`,
     )
     .get(episodeId) as EpisodeRow | undefined;
   if (!row) throw new OctoError("missing_episode", episodeId);

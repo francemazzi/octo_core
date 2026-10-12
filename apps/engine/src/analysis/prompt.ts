@@ -17,7 +17,7 @@ export const EPISODES_SYSTEM_PROMPT = [
 ].join(" ");
 
 /** Screen text stays on its own line: no control or line-separator character can open a new one. */
-function oneLine(text: string): string {
+export function oneLine(text: string): string {
   return text.replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, " ");
 }
 

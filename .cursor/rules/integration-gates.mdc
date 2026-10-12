@@ -1,5 +1,5 @@
 ---
-description: Chiusura fasi A00–A12 solo con test di integrazione reale e pnpm gate
+description: Chiusura fasi A00–A13 solo con test di integrazione reale e pnpm gate
 alwaysApply: true
 ---
 
@@ -44,5 +44,6 @@ Fonte di verità: [roadmap.md](../../roadmap.md) § Contratto del test di integr
 | A10 | `tests/integration/A10.desktop-shell.test.ts` |
 | A11 | `tests/integration/A11.video-capture-port.test.ts` |
 | A12 | `tests/integration/A12.hardening-simulated.test.ts` |
+| A13 | `tests/integration/A13.session-assistant.test.ts` |
 
 Quando implementi una fase, aggiungi/aggiorna prima il test di integrazione che dimostra il comportamento, poi il codice minimo per farlo passare.

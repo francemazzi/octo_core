@@ -2,8 +2,11 @@ import { randomUUID } from "node:crypto";
 import { sha256 } from "../crypto/aes.js";
 import { OctoError } from "../errors.js";
 import type { Sql } from "../storage/db.js";
+import { cleanText } from "./reply.js";
 
 const DAY_MS = 86_400_000;
+/** What an operator's answer may leave on the activity as its declared note. */
+const MAX_NOTE_CHARS = 1_000;
 
 /** Question ids are scoped to the session, so two sessions never share a question row. */
 export function questionIdFor(sessionId: string, episodeId: string, prompt: string): string {
@@ -89,6 +92,11 @@ export function answerQuestion(
   ).run(randomUUID(), input.questionId, input.episodeId, input.text, status, input.nowIso);
   if (status === "accepted" && question) {
     db.prepare("UPDATE questions SET status = 'answered' WHERE id = ?").run(question.id);
+    // The answer stays on the activity as the operator's statement: a declaration, not evidence.
+    db.prepare("UPDATE episodes SET operator_note = ? WHERE id = ?").run(
+      cleanText(input.text, MAX_NOTE_CHARS) ?? null,
+      question.episode_id,
+    );
   }
   return { status };
 }

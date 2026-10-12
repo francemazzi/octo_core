@@ -55,7 +55,8 @@ export function sessionDetail(db: Sql, sessionId: string): SessionDetail {
   const episodes = db
     .prepare(
       `SELECT e.id AS episodeId, e.label, e.summary, e.activity_type AS activityType,
-         e.duration_ms AS durationMs, e.review_state AS reviewState
+         e.duration_ms AS durationMs, e.review_state AS reviewState,
+         e.operator_note AS operatorNote
        FROM episodes e LEFT JOIN episode_intervals i ON i.episode_id = e.id
        WHERE e.session_id = ? GROUP BY e.id
        ORDER BY MIN(i.start_ms) IS NULL, MIN(i.start_ms), e.id`,

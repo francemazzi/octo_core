@@ -53,6 +53,27 @@ describe("live Anthropic (B06)", () => {
         .get();
       expect(row).toMatchObject({ provider: "anthropic", outcome: "accepted" });
       expect(JSON.parse(String(row?.usage_json)).total_tokens).toBeGreaterThan(0);
+
+      // The session assistant over the same approved text: one Messages API call, JSON reply.
+      const { message } = await engine.chatSend({
+        sessionId: engine.listSessions()[0]?.sessionId ?? "",
+        text: "Quale ordine è stato inserito e con quale articolo?",
+        mode: "cloud_after_review",
+      });
+      expect(message).toMatchObject({ role: "assistant", promptSchema: "chat@1" });
+      expect(message.text.length).toBeGreaterThan(0);
+      const chat = engine.db
+        .prepare(
+          "SELECT outcome, usage_json, evidence_json FROM analysis_runs WHERE prompt_schema = 'chat@1'",
+        )
+        .get() as { outcome: string; usage_json: string; evidence_json: string };
+      expect(chat.outcome).toBe("accepted");
+      expect(JSON.parse(chat.usage_json).total_tokens).toBeGreaterThan(0);
+      expect(JSON.parse(chat.evidence_json)).toMatchObject({ chat: true, input: ["ev-order"] });
+      expect(engine.networkAudits()).toHaveLength(2);
+      process.stdout.write(
+        `LIVE_CHAT: verified=${String(message.verified)} citations=${JSON.stringify(message.citations)}\n`,
+      );
     } finally {
       engine.close();
     }

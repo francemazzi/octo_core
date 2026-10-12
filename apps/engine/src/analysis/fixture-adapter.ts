@@ -2,18 +2,43 @@ import { loadModelOutputFixture, loadSessionOracle } from "@octo/test-fixtures";
 import type { Stretch } from "../domain/time.js";
 import type {
   AnalysisProfile,
+  ChatTurn,
   ModelAdapter,
   ModelLocality,
   TimelineBuilder,
 } from "./model-adapter.js";
 
-export function createFixtureAdapter(locality: ModelLocality): ModelAdapter {
+/** What the fixture assistant replies, given the conversation it received. */
+export type ChatScript = (messages: ChatTurn[]) => unknown;
+
+export type FixtureOptions = { chat?: ChatScript };
+
+/** Answers in Italian, citing the first screenshot and the first activity of the last turn. */
+export function defaultChatScript(messages: ChatTurn[]): unknown {
+  const last = messages.at(-1)?.content ?? "";
+  const episodeId = /episodeId=(\S+)/.exec(last)?.[1];
+  return {
+    answer: "Nella sessione risulta l'attività indicata, come mostra la prima schermata.",
+    citations: [
+      { type: "evidence", id: "e1" },
+      ...(episodeId ? [{ type: "episode", id: episodeId }] : []),
+    ],
+  };
+}
+
+export function createFixtureAdapter(
+  locality: ModelLocality,
+  options: FixtureOptions = {},
+): ModelAdapter {
+  const script = options.chat ?? defaultChatScript;
   return {
     provider: "fixture",
     locality,
     promptSchema: "model-output@2",
     status: () => Promise.resolve({ up: true, model: "mock" }),
     interpret: () => Promise.resolve({ model: "mock", raw: fixtureOutput() }),
+    converse: (_system, messages) =>
+      Promise.resolve({ model: "mock", content: JSON.stringify(script(messages)) }),
   };
 }
 
@@ -32,9 +57,12 @@ export function oracleTimeline(): TimelineBuilder {
   return () => stretches;
 }
 
-export function fixtureProfile(): AnalysisProfile {
+export function fixtureProfile(options: FixtureOptions = {}): AnalysisProfile {
   return {
-    models: { local: createFixtureAdapter("local"), remote: createFixtureAdapter("remote") },
+    models: {
+      local: createFixtureAdapter("local", options),
+      remote: createFixtureAdapter("remote", options),
+    },
     timeline: oracleTimeline(),
   };
 }

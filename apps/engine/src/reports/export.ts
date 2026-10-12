@@ -15,6 +15,11 @@ export type ReportSnapshot = {
     durationMs: number;
     objective: string;
     reviewState: string;
+    /** Name and summary written by the model; null for activities it did not describe. */
+    label: string | null;
+    summary: string | null;
+    /** What the operator declared when answering a question: a statement, not evidence. */
+    operatorNote: string | null;
   }>;
   opportunities: Array<{ problem: string; economics: unknown }>;
   missingClips: boolean;
@@ -36,7 +41,8 @@ export async function exportSessionTree(
   const version = (previous.version ?? 0) + 1;
   const episodes = db
     .prepare(
-      `SELECT id, activity_type, duration_ms, objective, review_state FROM episodes WHERE session_id = ?`,
+      `SELECT id, activity_type, duration_ms, objective, review_state, label, summary, operator_note
+       FROM episodes WHERE session_id = ?`,
     )
     .all(session.id) as Array<{
     id: string;
@@ -44,6 +50,9 @@ export async function exportSessionTree(
     duration_ms: number;
     objective: string;
     review_state: string;
+    label: string | null;
+    summary: string | null;
+    operator_note: string | null;
   }>;
   const opportunities = db
     .prepare("SELECT problem, economics_json FROM opportunities WHERE session_id = ?")
@@ -66,6 +75,9 @@ export async function exportSessionTree(
       durationMs: episode.duration_ms,
       objective: episode.objective,
       reviewState: episode.review_state,
+      label: episode.label,
+      summary: episode.summary,
+      operatorNote: episode.operator_note,
     })),
     opportunities: opportunities.map((item) => ({
       problem: item.problem,
@@ -109,6 +121,9 @@ export async function exportSessionTree(
           episodeId: episode.id,
           activityType: episode.activityType,
           objective: episode.objective,
+          label: episode.label,
+          summary: episode.summary,
+          operatorNote: episode.operatorNote,
           status: episode.reviewState,
           durationMs: episode.durationMs,
           intervals: intervals.map((interval) => ({
@@ -161,16 +176,26 @@ async function renderDocx(snapshot: ReportSnapshot): Promise<Buffer> {
       children: [new TextRun(`Stato: ${snapshot.status === "approved" ? "approvato" : "bozza"}`)],
     }),
     new Paragraph({ children: [new TextRun(`Sessione ${snapshot.sessionId}`)] }),
-    ...snapshot.episodes.map(
-      (episode) =>
-        new Paragraph({
-          children: [
-            new TextRun(
-              `${episode.id} ${episode.activityType} ${episode.durationMs} ms ${episode.objective}`,
-            ),
-          ],
-        }),
-    ),
+    ...snapshot.episodes.flatMap((episode) => [
+      ...(episode.label
+        ? [new Paragraph({ children: [new TextRun({ text: episode.label, bold: true })] })]
+        : []),
+      new Paragraph({
+        children: [
+          new TextRun(
+            `${episode.id} ${episode.activityType} ${episode.durationMs} ms ${episode.objective}`,
+          ),
+        ],
+      }),
+      ...(episode.summary ? [new Paragraph({ children: [new TextRun(episode.summary)] })] : []),
+      ...(episode.operatorNote
+        ? [
+            new Paragraph({
+              children: [new TextRun(`Dichiarazione dell'operatore: ${episode.operatorNote}`)],
+            }),
+          ]
+        : []),
+    ]),
     new Paragraph({
       children: [new TextRun(snapshot.missingClips ? "Clip: non disponibili" : "Clip: presenti")],
     }),

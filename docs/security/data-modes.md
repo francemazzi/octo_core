@@ -32,3 +32,16 @@ Con `OCTO_CAPTURE=screen` (default del desktop) Octo fa uno screenshot degli sch
 - Una lettura fallita scrive l'audit `ocr_failed` (id del frame ed errore, mai il testo).
 - Su macOS serve il permesso "Registrazione schermo"; senza, la dashboard lo dice e non registra contenuti.
 
+
+## Assistente della sessione
+
+Nel dettaglio di una sessione **ferma** l'operatore può fare domande all'assistente (`chat.send`, `chat.history`). Vale lo stesso perimetro dell'analisi:
+
+- In `local_only` risponde solo Ollama in loopback; senza modello la domanda fallisce con `model_unavailable` e nulla parte.
+- In `cloud_after_review` risponde il provider remoto configurato, dopo la stessa conferma di "Analizza con …" (provider, modello, workspace, numero di schermate), che resta registrata con `review.approve` una volta per sessione. Partono solo le evidenze `approved`, come testo minimizzato e mascherato, in **un solo blocco** da 200 schermate al massimo: oltre, la risposta è marcata `partial`.
+- Ogni domanda manda al modello anche i dati già derivati: titolo e durata della sessione, attività con etichetta, riassunto, durate e intervalli, domande aperte e risposte dell'operatore, esito dell'ultima analisi, più gli ultimi 10 turni della conversazione. Non manda immagini, chiavi o altre sessioni.
+- Prima di ogni chiamata remota viene scritto l'audit `network` con gli id inviati e il provider. Ogni chiamata è registrata in `analysis_runs` con `prompt_schema = chat@1`, modalità, modello, copertura, esito e uso; non conta mai come ultima analisi della sessione.
+- La risposta è accettata solo come JSON con `answer` e `citations`. Le citazioni vengono verificate contro le evidenze inviate e le attività della sessione: quelle inesistenti sono scartate e annotate nel run (`issues.unknownCitations`); senza citazioni valide la risposta è mostrata come "non verificata". Una risposta vuota è `invalid_model_output` e la domanda non viene salvata.
+- Il testo delle schermate e ogni etichetta, riassunto, nota o risposta sono dati non fidati nel prompt: un'istruzione scritta in una schermata non cambia modalità, perimetro né attività. L'assistente non modifica mai le attività: le correzioni restano un'azione esplicita della persona.
+- Dopo un riavvio la chiave dei media non persiste: le schermate di una sessione precedente non sono leggibili, l'assistente risponde dalle attività e dalle risposte già date, e la risposta è `partial` (`unreadable` nel run).
+- La risposta accettata a una domanda del modello resta sull'attività come **dichiarazione dell'operatore** (`operator_note`): appare nel dettaglio, nel DOCX e in `activity.json` etichettata come tale, mai come evidenza.

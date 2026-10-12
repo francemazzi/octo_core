@@ -54,6 +54,6 @@ pnpm gate:all
 
 ## Riferimenti rapidi
 
-- Mappa integrazione A00–A12: roadmap §3 e [.cursor/rules/integration-gates.mdc](./.cursor/rules/integration-gates.mdc)
+- Mappa integrazione A00–A13: roadmap §3 e [.cursor/rules/integration-gates.mdc](./.cursor/rules/integration-gates.mdc)
 - Clean code: [.cursor/rules/clean-code.mdc](./.cursor/rules/clean-code.mdc)
 - Istruzioni Codex/altri agenti: [AGENTS.md](./AGENTS.md)

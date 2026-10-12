@@ -74,6 +74,10 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
       };
     case "review.approve":
       return engine.approveSession(command.sessionId);
+    case "chat.send":
+      return engine.chatSend(command);
+    case "chat.history":
+      return { messages: engine.chatHistory(command.sessionId) };
     default:
       throw new OctoError("invalid_payload", "unknown command");
   }
@@ -83,6 +87,7 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
 const SLOW_COMMANDS: ReadonlySet<EngineCommand["cmd"]> = new Set([
   "analysis.run",
   "question.answer",
+  "chat.send",
   "export.run",
   "report.tick",
   "session.delete",

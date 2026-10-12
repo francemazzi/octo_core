@@ -44,7 +44,10 @@ export function recordRun(db: Sql, run: RunRecord): void {
   );
 }
 
-/** The last recorded call for the session, or the last accepted one. */
+/**
+ * The last recorded analysis call for the session, or the last accepted one. Calls of the
+ * session assistant (`chat@…`) are recorded in the same table but never count as an analysis.
+ */
 export function latestRun(
   db: Sql,
   sessionId: string,
@@ -57,6 +60,7 @@ export function latestRun(
            < json_extract(evidence_json, '$.evidenceTotal'), 0) AS partial
        FROM analysis_runs
        WHERE session_id = ? AND (? = 0 OR outcome = 'accepted')
+         AND prompt_schema NOT LIKE 'chat@%'
        ORDER BY rowid DESC LIMIT 1`,
     )
     .get(sessionId, options.accepted ? 1 : 0) as

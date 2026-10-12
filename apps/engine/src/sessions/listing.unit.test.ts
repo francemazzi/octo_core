@@ -48,8 +48,18 @@ describe("session listing", () => {
         ["episode-B", "Risposta a una mail"],
       ]);
       expect(detail.questions).toHaveLength(1);
+      expect(detail.episodes.map((episode) => episode.operatorNote)).toEqual([null, null]);
       expect(detail.lastRun).toMatchObject({ outcome: "accepted", model: "mock", error: null });
       expect(() => engine.sessionDetail("missing")).toThrow("missing");
+
+      await engine.answerQuestion({
+        questionId: detail.questions[0]?.questionId ?? "",
+        episodeId: "episode-A",
+        text: "sì, stesso ordine",
+      });
+      const answered = sessionDetailResultSchema.parse(engine.sessionDetail(first));
+      expect(answered.episodes[0]?.operatorNote).toBe("sì, stesso ordine");
+      expect(answered.questions).toHaveLength(0);
     } finally {
       engine.close();
     }

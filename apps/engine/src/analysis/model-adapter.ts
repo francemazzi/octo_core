@@ -25,6 +25,12 @@ export type KnownActivity = { episodeId: string; activityType: string; label?: s
 
 export type ModelStatus = { up: boolean; model: string | null };
 
+/** One turn of the session assistant's conversation; the system prompt travels separately. */
+export type ChatTurn = { role: "user" | "assistant"; content: string };
+
+/** The raw text of a conversational reply; the chat service validates it before storing it. */
+export type ConverseReply = { model: string; content: string; usage?: Record<string, number> };
+
 /**
  * A model sees evidence text and returns raw JSON. It gets no shell, file or network tools:
  * the graph validates the reply with `acceptModelOutput` before anything is written.
@@ -38,6 +44,11 @@ export interface ModelAdapter {
   readonly promptSchema: string;
   status(): Promise<ModelStatus>;
   interpret(evidence: ModelEvidence[], known?: readonly KnownActivity[]): Promise<ModelReply>;
+  /**
+   * Free-form conversation for the session assistant, over the same perimeter rules as
+   * `interpret`. Adapters without it leave the assistant unavailable.
+   */
+  converse?(system: string, messages: ChatTurn[]): Promise<ConverseReply>;
 }
 
 export type TimelineInput = {

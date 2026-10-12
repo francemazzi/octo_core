@@ -1,7 +1,7 @@
 import { MODEL_CALL_TIMEOUT_MS } from "@octo/contracts";
 import { z } from "zod";
 import { OctoError } from "../errors.js";
-import type { ModelAdapter } from "./model-adapter.js";
+import type { ChatTurn, ConverseReply, ModelAdapter } from "./model-adapter.js";
 import { EPISODES_PROMPT_SCHEMA, EPISODES_SYSTEM_PROMPT, userPrompt } from "./prompt.js";
 import { readReply } from "./reply.js";
 
@@ -70,6 +70,41 @@ export async function verifyAnthropicKey(options: AnthropicOptions): Promise<voi
   await request(options, "/models?limit=1");
 }
 
+/** One Messages API call; a `stop_reason` other than `end_turn` is an incomplete reply. */
+async function complete(
+  options: AnthropicOptions,
+  model: string,
+  system: string,
+  messages: ChatTurn[],
+): Promise<ConverseReply> {
+  const response = await request(options, "/messages", {
+    model,
+    max_tokens: options.maxTokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
+    system,
+    messages,
+  });
+  const parsed = messageSchema.safeParse(await response.json().catch(() => null));
+  if (!parsed.success || parsed.data.stop_reason !== "end_turn") {
+    throw new OctoError(
+      "invalid_model_output",
+      "Anthropic returned an incomplete or invalid message",
+    );
+  }
+  const body = parsed.data;
+  return {
+    model: body.model,
+    content: body.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text ?? "")
+      .join("\n"),
+    usage: {
+      prompt_tokens: body.usage.input_tokens,
+      completion_tokens: body.usage.output_tokens,
+      total_tokens: body.usage.input_tokens + body.usage.output_tokens,
+    },
+  };
+}
+
 export function createAnthropicAdapter(options: AnthropicOptions): ModelAdapter {
   const model = options.model ?? DEFAULT_ANTHROPIC_MODEL;
   return {
@@ -79,33 +114,15 @@ export function createAnthropicAdapter(options: AnthropicOptions): ModelAdapter 
     promptSchema: EPISODES_PROMPT_SCHEMA,
     status: async () => ({ up: options.apiKey.length > 0, model }),
     async interpret(evidence, known) {
-      const response = await request(options, "/messages", {
-        model,
-        max_tokens: options.maxTokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
-        system: EPISODES_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userPrompt(evidence, known) }],
-      });
-      const parsed = messageSchema.safeParse(await response.json().catch(() => null));
-      if (!parsed.success || parsed.data.stop_reason !== "end_turn") {
-        throw new OctoError(
-          "invalid_model_output",
-          "Anthropic returned an incomplete or invalid message",
-        );
-      }
-      const body = parsed.data;
-      const content = body.content
-        .filter((block) => block.type === "text")
-        .map((block) => block.text ?? "")
-        .join("\n");
+      const reply = await complete(options, model, EPISODES_SYSTEM_PROMPT, [
+        { role: "user", content: userPrompt(evidence, known) },
+      ]);
       return {
-        model: body.model,
-        ...readReply(content, evidence, known),
-        usage: {
-          prompt_tokens: body.usage.input_tokens,
-          completion_tokens: body.usage.output_tokens,
-          total_tokens: body.usage.input_tokens + body.usage.output_tokens,
-        },
+        model: reply.model,
+        ...readReply(reply.content, evidence, known),
+        usage: reply.usage,
       };
     },
+    converse: (system, messages) => complete(options, model, system, messages),
   };
 }

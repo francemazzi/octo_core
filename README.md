@@ -163,3 +163,17 @@ Per avviare il motore tramite ambiente:
 - `OCTO_ANTHROPIC_URL` è riservato ai server finti di test e accetta solo loopback.
 
 `pnpm test:anthropic` esegue lo smoke live separato del binario B, con una chiave fornita nell'ambiente e soli dati sintetici. Può generare al massimo due richieste da 800 token di output ciascuna, fatturate dal provider. Non entra nei gate A o nella CI ordinaria; senza chiave resta `pending`.
+
+## Assistente della sessione
+
+Nel dettaglio di una sessione ferma c'è il pannello **Assistente della sessione**: una domanda in italiano ("quanto ho lavorato sull'ordine?") riceve una risposta che cita le attività e le schermate su cui si basa. Le citazioni sono verificate dal motore: una risposta senza riscontri è mostrata come **non verificata**. L'assistente usa Ollama in locale; con un provider remoto configurato puoi sceglierlo per domanda, dopo la stessa conferma dell'analisi remota, e partono solo le schermate approvate. Ogni chiamata è registrata come le analisi (`chat@1`), con audit di rete prima di ogni invio remoto. L'assistente non modifica mai le attività.
+
+Le risposte che dai alle domande del modello restano sull'attività come **dichiarazione dell'operatore**: compaiono nel dettaglio, nel DOCX e in `activity.json`, e l'assistente le conosce. Dettagli del perimetro in [docs/security/data-modes.md](./docs/security/data-modes.md).
+
+## Licenza e firme
+
+Octo Core è software libero distribuito sotto **GPL-3.0-or-later** (file `LICENSE`). Chi riceve un pacchetto, firmato o no, ha gli stessi diritti di chi compila dai sorgenti: la firma attesta soltanto l'origine del binario e non aggiunge condizioni alla licenza. Le dipendenze di produzione sono verificate da `pnpm check:licenses` (allowlist di licenze compatibili in `scripts/gates/licenses.ts`); l'elenco con le rispettive licenze è in `THIRD-PARTY-NOTICES.txt`, allegato a ogni release e incluso nei pacchetti.
+
+I pacchetti macOS sono firmati con Developer ID e notarizzati da Apple quando la release è prodotta con le credenziali configurate. I pacchetti Windows sono firmati con Azure Artifact Signing solo se il servizio è configurato; in caso contrario escono **non firmati** e la release lo dichiara in `UNSIGNED.txt`. Su un binario non firmato SmartScreen mostra «PC protetto da Windows»: procedere con «Ulteriori informazioni» → «Esegui comunque» solo dopo aver verificato l'hash. Anche un binario appena firmato può ricevere l'avviso finché non acquisisce reputazione. Linux è distribuito senza firma.
+
+Ogni release pubblica `SHA256SUMS.txt`. Per verificare un download: `shasum -a 256 -c SHA256SUMS.txt` su macOS/Linux nella cartella dei file, oppure `certutil -hashfile <file> SHA256` su Windows confrontando il valore con la riga corrispondente. Processo completo, nomi dei secret e passi manuali in [docs/releases/firma.md](./docs/releases/firma.md); decisione in [ADR 0002](./docs/adr/0002-firma-e-licenza.md).

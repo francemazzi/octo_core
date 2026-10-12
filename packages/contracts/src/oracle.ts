@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { chatHistoryCommandSchema, chatSendCommandSchema } from "./chat.js";
 
 export const timeIntervalSchema = z.object({
   sourceId: z.string().min(1),
@@ -266,6 +267,8 @@ export const engineCommandSchema = z.discriminatedUnion("cmd", [
     cmd: z.literal("review.approve"),
     sessionId: z.string().min(1).max(100),
   }),
+  chatSendCommandSchema,
+  chatHistoryCommandSchema,
 ]);
 
 export type EngineCommand = z.infer<typeof engineCommandSchema>;

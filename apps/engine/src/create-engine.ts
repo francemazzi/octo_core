@@ -22,6 +22,7 @@ import { fixtureProfile } from "./analysis/fixture-adapter.js";
 import type { AnalysisProfile } from "./analysis/model-adapter.js";
 import { createRemoteSlot, type RemoteModels } from "./analysis/remote-slot.js";
 import { createAnalysisService } from "./analysis/service.js";
+import { createChatService, type ChatSendInput } from "./chat/service.js";
 import { tickMiniReport } from "./reports/cadence.js";
 import { JobRunner, type JobRow } from "./jobs/runner.js";
 import { applyRetention, evaluateQuota } from "./jobs/quota.js";
@@ -118,13 +119,15 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
         )
         .run(randomUUID(), nowWall(), JSON.stringify(detail)),
   });
+  const readText = (assetId: string) => media.readPlaintext(assetId).toString("utf8");
   const analysis = createAnalysisService({
     db,
     profile,
-    readText: (assetId) => media.readPlaintext(assetId).toString("utf8"),
+    readText,
     nowWall,
     requireSession: () => requireSession(),
   });
+  const chat = createChatService({ db, profile, readText, nowWall });
 
   function active(): SessionRow | undefined {
     return db
@@ -398,6 +401,13 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
     },
     openQuestions() {
       return analysis.list();
+    },
+    /** The session assistant: one question, one answer with citations, on a stopped session. */
+    chatSend(input: ChatSendInput) {
+      return chat.send(input);
+    },
+    chatHistory(sessionId: string) {
+      return chat.history(sessionId);
     },
     listSessions(limit?: number) {
       return listSessions(db, limit);

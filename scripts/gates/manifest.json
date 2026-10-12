@@ -20,7 +20,11 @@
     "A01": {
       "track": "automatic",
       "integration": "tests/integration/A01.monorepo-gates.test.ts",
-      "unit": ["scripts/gates/inspect.unit.test.ts", "scripts/gates/scan-secrets.unit.test.ts"],
+      "unit": [
+        "scripts/gates/inspect.unit.test.ts",
+        "scripts/gates/scan-secrets.unit.test.ts",
+        "scripts/gates/check-licenses.unit.test.ts"
+      ],
       "evidenceRequired": true
     },
     "A02": {
@@ -111,6 +115,17 @@
       "track": "automatic",
       "integration": "tests/integration/A12.hardening-simulated.test.ts",
       "unit": [],
+      "evidenceRequired": true
+    },
+    "A13": {
+      "track": "automatic",
+      "integration": "tests/integration/A13.session-assistant.test.ts",
+      "unit": [
+        "apps/engine/src/chat/prompt.unit.test.ts",
+        "apps/engine/src/chat/reply.unit.test.ts",
+        "apps/engine/src/analysis/runs.unit.test.ts",
+        "apps/desktop/src/main/chat.unit.test.ts"
+      ],
       "evidenceRequired": true
     }
   }

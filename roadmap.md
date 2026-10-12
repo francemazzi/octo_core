@@ -27,6 +27,7 @@ Installazione Windows
   → acquisizione locale di evidenze minimizzate
   → analisi dei segmenti autorizzati
   → domande contestuali limitate
+  → assistente della sessione con risposte citate (a sessione ferma)
   → revisione delle attività ricostruite
   → cartelle per attività, screenshot e clip
   → report DOCX con tempi, evidenze e opportunità da verificare
@@ -47,7 +48,7 @@ Acquisire tutto un monitor non significa leggere finestre mai aperte, database o
 ```mermaid
 flowchart LR
   subgraph autoTrack [Binario A automatico]
-    A00 --> A01 --> A02 --> A03 --> A04 --> A05 --> A06 --> A07 --> A08 --> A09 --> A10 --> A11 --> A12
+    A00 --> A01 --> A02 --> A03 --> A04 --> A05 --> A06 --> A07 --> A08 --> A09 --> A10 --> A11 --> A12 --> A13
   end
   subgraph sideTracks [Non bloccano A]
     B[Binario B Windows e modello live]
@@ -88,6 +89,7 @@ Ogni fase **A** termina con **un solo** file sotto `tests/integration/`:
 | A10 | `tests/integration/A10.desktop-shell.test.ts` |
 | A11 | `tests/integration/A11.video-capture-port.test.ts` |
 | A12 | `tests/integration/A12.hardening-simulated.test.ts` |
+| A13 | `tests/integration/A13.session-assistant.test.ts` |
 
 Requisiti comuni:
 
@@ -445,6 +447,22 @@ Invarianti obbligatorie:
 
 ---
 
+## Fase A13 — Assistente della sessione
+
+**Dipendenze:** A12.
+
+- [x] **A13.01 — Conversazione sugli adapter.** `converse(system, messages)` su Ollama, OpenRouter, Anthropic e fixture; `interpret` invariato.
+- [x] **A13.02 — Servizio chat.** Comandi `chat.send` (lane lenta) e `chat.history`; contesto da attività, domande, risposte e testo delle evidenze nel perimetro della modalità (un solo blocco, `partial` oltre); citazioni verificate contro evidenze inviate ed episodi; `analysis_runs` con `chat@1`; audit `network` prima di ogni chiamata remota; tabella `chat_messages`.
+- [x] **A13.03 — Pannello desktop.** "Assistente della sessione" nel dettaglio di una sessione ferma: domanda, risposta con chip delle citazioni, badge "non verificata", nota di contesto parziale, consenso prima della prima domanda remota.
+- [x] **A13.04 — Dichiarazioni dell'operatore.** La risposta accettata a una domanda resta sull'attività (`operator_note`), appare nel dettaglio, nel DOCX e in `activity.json` come "Dichiarazione dell'operatore", e nel contesto dell'assistente.
+- [x] **A13.G — Gate A13.** `pnpm gate A13` verde.
+
+**Test di integrazione:** `tests/integration/A13.session-assistant.test.ts` — fixture, zero rete: risposta citata e persistita; citazioni inesistenti → `verified=false`; sessione in corso rifiutata; `local_only` non chiama il remoto, `cloud_after_review` manda solo le evidenze approvate con audit `network`; risposta dell'operatore nel dettaglio, nel DOCX e nel contesto; pannello desktop con chip dell'attività.
+
+**Fuori da A13 (fase successiva):** proposte di correzione in linguaggio naturale applicate con un click (`chat@2`, `review.apply` con motivo in `episode_revisions`).
+
+---
+
 ## Binario B — Windows e modello live
 
 **Non blocca il binario A.** Stato iniziale consigliato: `pending`. Evidenze in `docs/testing/B.md`.
@@ -543,7 +561,9 @@ Soglie di progetto, non garanzie. Congelare in A00 o modificare con ADR.
 - [ ] `pnpm gate:all` verde su commit/tag release.
 - [ ] Binario B: evidenze B01–B08 non `pending` (o limiti dichiarati in ADR).
 - [ ] Binario C: C01–C04 minimo per pilot sintetico; C02 obbligatorio per dati reali.
-- [ ] Installer hash documentato; firma se policy IT lo richiede.
+- [ ] `pnpm check:licenses` verde: nessuna dipendenza di produzione fuori dall'allowlist GPL-3.0-or-later; `THIRD-PARTY-NOTICES.txt` e `LICENSE` in `release/<versione>/` e dentro i pacchetti.
+- [ ] `SHA256SUMS.txt` per ogni artefatto, verificato con `sha256sum -c` nel job `publish`; hash riportati nelle note di `docs/releases/<versione>.md`.
+- [ ] Stato firma dichiarato: macOS firmato + notarizzato (`notary-result-*-app.json` e `-dmg.json` con `Accepted`, `spctl` accepted) oppure elencato in `UNSIGNED.txt`; Windows firmato con Azure Artifact Signing (`windows-signing-report-*.json`) oppure elencato in `UNSIGNED.txt` con spiegazione SmartScreen. Mai self-signed.
 - [ ] Nessun dato aziendale in Git/CI; funzionalità sperimentali etichettate.
 
 ---

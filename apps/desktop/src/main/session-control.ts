@@ -5,6 +5,7 @@ import { initialUiState, type Pending, type UiSource, type UiState } from "../sh
 import type { EngineRequest } from "./engine-client.js";
 import { analysisNote, describeError, PERMISSION_NOTE } from "./notes.js";
 import { answerNote, fetchQuestions, parseAnswer, parseId } from "./questions.js";
+import { assertRemoteUnchanged } from "./remote-guard.js";
 import type { ScreenCapture } from "./screen-capture.js";
 import { fetchDetail, fetchSessions } from "./sessions.js";
 import { syntheticFrames } from "./synthetic.js";
@@ -198,14 +199,7 @@ export function createSessionControl(deps: ControlDeps) {
     },
     analyzeRemote(payload: unknown): UiState {
       const input = remoteAnalysisInputSchema.parse(payload);
-      if (
-        !state.remote.available ||
-        input.provider !== state.remote.provider ||
-        input.model !== state.remote.model ||
-        (input.workspaceId ?? null) !== state.remote.workspaceId
-      ) {
-        throw new Error("Il provider o il modello sono cambiati. Conferma nuovamente l’invio.");
-      }
+      assertRemoteUnchanged(state.remote, input);
       void analyse(input.sessionId, "cloud_after_review");
       return state;
     },

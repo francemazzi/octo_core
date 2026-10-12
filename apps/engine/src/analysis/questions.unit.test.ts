@@ -33,6 +33,18 @@ describe("question quota", () => {
       ) VALUES ('s', 'p', 'op', '2026-01-15T00:00:00.000Z', 'recording', 'idle', '[]', 'mvp-1', 'e')`,
       )
       .run();
+    database
+      .prepare(
+        `INSERT INTO episodes (id, session_id, activity_type, case_id, objective, review_state, duration_ms)
+         VALUES ('episode-A', 's', 'order_entry', NULL, 'Attività episode-A', 'proposed', 0)`,
+      )
+      .run();
+    const note = () =>
+      (
+        database.prepare("SELECT operator_note FROM episodes WHERE id = 'episode-A'").get() as {
+          operator_note: string | null;
+        }
+      ).operator_note;
 
     const base = {
       sessionId: "s",
@@ -65,6 +77,7 @@ describe("question quota", () => {
       nowIso: "2026-01-15T01:00:00.000Z",
     });
     expect(quarantined.status).toBe("quarantined");
+    expect(note()).toBeNull();
 
     deferQuestion(database, "q2");
     expect(listOpenQuestions(database).map((row) => [row.questionId, row.status])).toEqual([
@@ -75,10 +88,12 @@ describe("question quota", () => {
     const later = answerQuestion(database, {
       questionId: "q2",
       episodeId: "episode-A",
-      text: "sì",
+      text: " sì,\u0000 stesso\n ordine ",
       nowIso: "2026-01-15T02:00:00.000Z",
     });
     expect(later.status).toBe("accepted");
+    // The accepted answer stays on the activity as the operator's statement, cleaned for display.
+    expect(note()).toBe("sì, stesso ordine");
     deferQuestion(database, "q2");
     expect(listOpenQuestions(database).some((row) => row.questionId === "q2")).toBe(false);
   });

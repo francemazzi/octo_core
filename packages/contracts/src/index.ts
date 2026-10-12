@@ -14,10 +14,24 @@ export {
 
 export {
   ANALYSIS_TIMEOUT_MS,
+  CHAT_TIMEOUT_MS,
   MAX_ANALYSIS_BATCHES,
   MAX_BATCH_EVIDENCE,
+  MAX_CHAT_ANSWER_CHARS,
+  MAX_CHAT_CITATIONS,
+  MAX_CHAT_HISTORY_TURNS,
+  MAX_CHAT_TEXT_CHARS,
   MODEL_CALL_TIMEOUT_MS,
 } from "./limits.js";
+
+export {
+  chatCitationSchema,
+  chatHistoryResultSchema,
+  chatMessageSchema,
+  chatModeSchema,
+  chatSendResultSchema,
+} from "./chat.js";
+export type { ChatCitation, ChatMessage, ChatMode } from "./chat.js";
 
 export {
   MAX_EPISODE_LABEL_CHARS,

@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AnswerInput, OctoBridge, RemoteInput, UiState } from "../shared/ui-state.js";
+import type {
+  AnswerInput,
+  ChatSendInput,
+  OctoBridge,
+  RemoteInput,
+  UiState,
+} from "../shared/ui-state.js";
 
 const api: OctoBridge = {
   getState: () => ipcRenderer.invoke("octo:getState"),
@@ -17,6 +23,9 @@ const api: OctoBridge = {
   removeRemote: (provider) => ipcRenderer.invoke("octo:removeRemote", provider),
   selectRemote: (provider) => ipcRenderer.invoke("octo:selectRemote", provider),
   analyzeRemote: (input) => ipcRenderer.invoke("octo:analyzeRemote", input),
+  installUpdate: () => ipcRenderer.invoke("octo:installUpdate"),
+  chatSend: (input: ChatSendInput) => ipcRenderer.invoke("octo:chatSend", input),
+  chatHistory: (sessionId: string) => ipcRenderer.invoke("octo:chatHistory", sessionId),
   onState: (callback: (state: UiState) => void) => {
     const listener = (_event: unknown, state: UiState) => callback(state);
     ipcRenderer.on("octo:state", listener);

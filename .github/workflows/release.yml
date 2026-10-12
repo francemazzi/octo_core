@@ -1,0 +1,213 @@
+name: release
+
+# Builds, signs (when the credentials exist) and publishes Octo Core when a `v*` tag is pushed.
+# Process and manual setup: docs/releases/firma.md. Keys live only in GitHub secrets.
+
+on:
+  push:
+    tags: ["v*"]
+  # Dry run from a branch: builds, signs and uploads the artifacts without publishing.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    name: macOS packages (sign + notarize)
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      HAS_APPLE_CERT: ${{ secrets.MACOS_CERT_P12_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Import the Developer ID certificate into a temporary keychain
+        if: env.HAS_APPLE_CERT == 'true'
+        uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v5.0.2
+        with:
+          p12-file-base64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          p12-password: ${{ secrets.MACOS_CERT_P12_PASSWORD }}
+      - name: Package, sign, notarize and staple
+        env:
+          MACOS_DEVELOPER_ID: ${{ secrets.MACOS_DEVELOPER_ID }}
+          MACOS_APPLE_ID: ${{ secrets.MACOS_APPLE_ID }}
+          MACOS_APPLE_TEAM_ID: ${{ secrets.MACOS_APPLE_TEAM_ID }}
+          MACOS_APPLE_APP_PASSWORD: ${{ secrets.MACOS_APPLE_APP_PASSWORD }}
+        run: pnpm package:release mac-arm64 mac-x64
+      - name: Upload macOS packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-macos
+          path: |
+            release/*/OctoCore-*
+            release/*/SHA256SUMS.txt
+            release/*/LICENSE
+            release/*/THIRD-PARTY-NOTICES.txt
+            release/*/UNSIGNED.txt
+          if-no-files-found: error
+      - name: Preserve notarization diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: notarization-diagnostics
+          path: release/*/notary-*.json
+          if-no-files-found: ignore
+
+  windows:
+    # Runs on macOS on purpose: the packaging pipeline (icons, ditto) is the one used locally,
+    # @electron/packager edits Windows resources in pure JS, and Jsign signs through Azure from
+    # any host. scripts/ci/*.ps1 cover a native windows-2022 runner if that is ever preferred.
+    name: Windows packages (Azure Artifact Signing when configured)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    environment: windows-release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_SIGNING: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT != '' }}
+      AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+      AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT_NAME }}
+      AZURE_ARTIFACT_SIGNING_CERT_PROFILE_NAME: ${{ vars.AZURE_ARTIFACT_SIGNING_CERT_PROFILE_NAME }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the desktop app before the Azure login (the OIDC assertion is short-lived)
+        run: |
+          pnpm --filter @octo/desktop build
+          pnpm --filter @octo/desktop bundle-engine
+      - name: Check the Windows signing configuration
+        if: env.AZURE_SIGNING == 'true'
+        shell: pwsh
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: ./scripts/ci/assert-windows-signing.ps1
+      - name: Install Jsign and osslsigncode
+        if: env.AZURE_SIGNING == 'true'
+        run: brew install jsign osslsigncode
+      - name: Azure login (OIDC) right before signing
+        if: env.AZURE_SIGNING == 'true'
+        uses: azure/login@2dd0bbf4064d5a1812889dc200bb8eed2597f82a # v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Package and sign
+        run: pnpm package:release --no-build win-x64 win-arm64
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-windows
+          path: |
+            release/*/OctoCore-*
+            release/*/SHA256SUMS.txt
+            release/*/UNSIGNED.txt
+            release/*/windows-signing-report-*.json
+          if-no-files-found: error
+
+  linux:
+    name: Linux packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm package:release linux-x64 linux-arm64
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-linux
+          path: |
+            release/*/OctoCore-*
+            release/*/SHA256SUMS.txt
+          if-no-files-found: error
+
+  publish:
+    name: GitHub release
+    needs: [macos, windows, linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-*
+          path: artifacts
+      - name: Assemble assets and merge SHA256SUMS.txt
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          PACKAGE_VERSION="$(node -p "require('./apps/desktop/package.json').version")"
+          if [ "$VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "tag $TAG does not match apps/desktop version $PACKAGE_VERSION" >&2
+            exit 1
+          fi
+          mkdir -p assets
+          find artifacts -type f -name 'OctoCore-*' -exec cp {} assets/ \;
+          find artifacts -type f -name SHA256SUMS.txt -exec cat {} + | LC_ALL=C sort -k2 > assets/SHA256SUMS.txt
+          (cd assets && sha256sum -c SHA256SUMS.txt)
+          cp LICENSE assets/LICENSE
+          NOTICES="$(find artifacts -type f -name THIRD-PARTY-NOTICES.txt | LC_ALL=C sort | head -n 1)"
+          test -n "$NOTICES" && cp "$NOTICES" assets/THIRD-PARTY-NOTICES.txt
+          UNSIGNED="$(find artifacts -type f -name UNSIGNED.txt | LC_ALL=C sort)"
+          if [ -n "$UNSIGNED" ]; then
+            {
+              for file in $UNSIGNED; do head -n 1 "$file"; done
+              echo
+              tail -n +3 "$(echo "$UNSIGNED" | head -n 1)"
+            } > assets/UNSIGNED.txt
+          fi
+          find artifacts -type f \( -name 'notary-result-*.json' -o -name 'windows-signing-report-*.json' \) -exec cp {} assets/ \;
+          ls -la assets
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "RELEASE_VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Create the GitHub release from the tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          NOTES="docs/releases/${RELEASE_VERSION}.md"
+          if [ -f "$NOTES" ]; then NOTES_ARGS=(--notes-file "$NOTES"); else NOTES_ARGS=(--generate-notes); fi
+          gh release create "$RELEASE_TAG" --verify-tag --title "Octo Core ${RELEASE_VERSION}" "${NOTES_ARGS[@]}" assets/*

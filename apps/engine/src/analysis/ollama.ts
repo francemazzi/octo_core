@@ -1,7 +1,12 @@
 import { MODEL_CALL_TIMEOUT_MS } from "@octo/contracts";
 import { DEFAULT_FRAME_SPAN_MS } from "../domain/frame-timeline.js";
 import { OctoError } from "../errors.js";
-import { frameTimeline, type AnalysisProfile, type ModelAdapter } from "./model-adapter.js";
+import {
+  frameTimeline,
+  type AnalysisProfile,
+  type ChatTurn,
+  type ModelAdapter,
+} from "./model-adapter.js";
 import { EPISODES_PROMPT_SCHEMA, EPISODES_SYSTEM_PROMPT, userPrompt } from "./prompt.js";
 import { readReply } from "./reply.js";
 
@@ -101,7 +106,8 @@ export async function probeOllama(
 
 export async function askOllama(
   model: string,
-  prompt: string,
+  system: string,
+  messages: ChatTurn[],
   fetchImpl: FetchLike = fetch,
   base = DEFAULT_OLLAMA_BASE,
 ): Promise<string> {
@@ -114,10 +120,7 @@ export async function askOllama(
       format: "json",
       // A full batch (200 lines of screen text plus the reply) does not fit in 8k tokens.
       options: { num_ctx: 16_384, temperature: 0.2 },
-      messages: [
-        { role: "system", content: EPISODES_SYSTEM_PROMPT },
-        { role: "user", content: prompt },
-      ],
+      messages: [{ role: "system", content: system }, ...messages],
     }),
     signal: AbortSignal.timeout(MODEL_CALL_TIMEOUT_MS),
   });
@@ -136,21 +139,31 @@ export function createOllamaAdapter(options: OllamaOptions = {}): ModelAdapter {
     throw new OctoError("non_loopback_model", "local_only accepts Ollama on this computer only");
   }
   const probe = () => probeOllama(options.fetchImpl, base, options);
+  async function chatModel(): Promise<string> {
+    const status = await probe();
+    if (!status.model) throw new OctoError("model_unavailable", "no local Ollama model");
+    return status.model;
+  }
   return {
     provider: "ollama",
     locality: "local",
     promptSchema: EPISODES_PROMPT_SCHEMA,
     status: probe,
     async interpret(evidence, known) {
-      const status = await probe();
-      if (!status.model) throw new OctoError("model_unavailable", "no local Ollama model");
+      const model = await chatModel();
       const content = await askOllama(
-        status.model,
-        userPrompt(evidence, known),
+        model,
+        EPISODES_SYSTEM_PROMPT,
+        [{ role: "user", content: userPrompt(evidence, known) }],
         options.fetchImpl,
         base,
       );
-      return { model: status.model, ...readReply(content, evidence, known) };
+      return { model, ...readReply(content, evidence, known) };
+    },
+    async converse(system, messages) {
+      const model = await chatModel();
+      const content = await askOllama(model, system, messages, options.fetchImpl, base);
+      return { model, content };
     },
   };
 }

@@ -1,6 +1,7 @@
 import type { UiRemote } from "../shared/ui-state.js";
 import type { SessionDetail as Detail, SessionListItem } from "@octo/contracts";
 import { useEffect, useState } from "react";
+import { ChatPanel } from "./ChatPanel.js";
 import { QuestionsPanel } from "./QuestionsPanel.js";
 import { RemoteAnalysis } from "./RemoteAnalysis.js";
 import {
@@ -81,6 +82,9 @@ export function SessionDetail({ item, analyzing, busy, remote }: Props) {
                 <span className="muted">{formatDuration(episode.durationMs)}</span>
               </div>
               {episode.summary ? <p>{episode.summary}</p> : null}
+              {episode.operatorNote ? (
+                <p className="statement">Dichiarazione dell'operatore: {episode.operatorNote}</p>
+              ) : null}
             </li>
           ))}
         </ol>
@@ -110,6 +114,15 @@ export function SessionDetail({ item, analyzing, busy, remote }: Props) {
         </p>
       ) : null}
       {questions.length > 0 ? <QuestionsPanel questions={questions} /> : null}
+      {!live && loaded ? (
+        <ChatPanel
+          key={`${item.sessionId}:${remote.provider}:${remote.model}:${remote.workspaceId}`}
+          sessionId={item.sessionId}
+          evidenceCount={loaded.evidenceCount}
+          remote={remote}
+          busy={busy || analyzing}
+        />
+      ) : null}
       {error ? <p role="alert">{error}</p> : null}
     </article>
   );
