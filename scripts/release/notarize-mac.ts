@@ -11,13 +11,19 @@ function capture(command: string, args: string[]): string {
 }
 
 /**
- * Notarization credentials as notarytool arguments: a keychain profile (OCTO_NOTARY_PROFILE)
- * or Apple ID + team + app-specific password (MACOS_APPLE_* with the older APPLE_* names
- * as fallback). Undefined when nothing is configured.
+ * Notarization credentials as notarytool arguments: a keychain profile (OCTO_NOTARY_PROFILE),
+ * an App Store Connect API key (MACOS_NOTARY_KEY_PATH, MACOS_NOTARY_KEY_ID,
+ * MACOS_NOTARY_ISSUER_ID) or Apple ID + team + app-specific password (MACOS_APPLE_* with the
+ * older APPLE_* names as fallback). Undefined when nothing is configured.
  */
 export function notaryCredentials(): string[] | undefined {
   const profile = process.env.OCTO_NOTARY_PROFILE;
   if (profile) return ["--keychain-profile", profile];
+  // An App Store Connect API key (.p8 + key id + issuer id) needs no Apple ID password.
+  const keyPath = process.env.MACOS_NOTARY_KEY_PATH;
+  const keyId = process.env.MACOS_NOTARY_KEY_ID;
+  const issuer = process.env.MACOS_NOTARY_ISSUER_ID;
+  if (keyPath && keyId && issuer) return ["--key", keyPath, "--key-id", keyId, "--issuer", issuer];
   const appleId = process.env.MACOS_APPLE_ID ?? process.env.APPLE_ID;
   const teamId = process.env.MACOS_APPLE_TEAM_ID ?? process.env.APPLE_TEAM_ID;
   const password = process.env.MACOS_APPLE_APP_PASSWORD ?? process.env.APPLE_APP_PASSWORD;

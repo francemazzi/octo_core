@@ -37,7 +37,9 @@ Script: `scripts/release/sign-mac.ts`, `scripts/release/notarize-mac.ts`, `scrip
 4. DMG dall'app già stapled, firmato con `--timestamp` (senza hardened runtime, non è codice), notarizzato e stapled a sua volta.
 5. Valutazione Gatekeeper: `spctl -a -vvv -t exec <app>` e `spctl -a -t open --context context:primary-signature -v <dmg>`. Con notarizzazione un rifiuto blocca la release; senza notarizzazione il verdetto è solo riportato nel riepilogo.
 
-Credenziali di notarizzazione, in ordine: profilo keychain `OCTO_NOTARY_PROFILE`, oppure `MACOS_APPLE_ID` + `MACOS_APPLE_TEAM_ID` + `MACOS_APPLE_APP_PASSWORD` (accettati anche i vecchi `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`). Prima dell'invio lo script esegue `notarytool history` come preflight.
+Credenziali di notarizzazione, in ordine: profilo keychain `OCTO_NOTARY_PROFILE`; oppure una **chiave API di App Store Connect** (`MACOS_NOTARY_KEY_PATH` al file `.p8`, `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_ISSUER_ID`), che non richiede password per app; oppure `MACOS_APPLE_ID` + `MACOS_APPLE_TEAM_ID` + `MACOS_APPLE_APP_PASSWORD` (accettati anche i vecchi `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`). Prima dell'invio lo script esegue `notarytool history` come preflight.
+
+La chiave API si genera su App Store Connect → Utenti e accesso → Integrazioni → App Store Connect API → Chiavi del team (ruolo Developer o superiore): il file `AuthKey_<ID>.p8` si scarica una sola volta; Key ID e Issuer ID sono mostrati nella pagina. In locale: `xcrun notarytool store-credentials octo-release-local --key AuthKey_<ID>.p8 --key-id <ID> --issuer <ISSUER>`. In CI: secret `MACOS_NOTARY_KEY_BASE64` (base64 del `.p8`), `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_ISSUER_ID`; il workflow scrive la chiave in `$RUNNER_TEMP` solo per la durata del job.
 
 ### Secret GitHub (repository)
 
@@ -49,6 +51,7 @@ Credenziali di notarizzazione, in ordine: profilo keychain `OCTO_NOTARY_PROFILE`
 | `MACOS_APPLE_ID` | Apple ID dell'account sviluppatore |
 | `MACOS_APPLE_TEAM_ID` | Team ID |
 | `MACOS_APPLE_APP_PASSWORD` | Password per app generata su appleid.apple.com |
+| `MACOS_NOTARY_KEY_BASE64`, `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_ISSUER_ID` | Alternativa senza password: chiave API di App Store Connect (`.p8` in base64, Key ID, Issuer ID) |
 
 Senza `MACOS_CERT_P12_BASE64` il job macOS produce pacchetti non firmati e `UNSIGNED.txt` lo dichiara.
 
