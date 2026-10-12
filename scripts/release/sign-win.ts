@@ -79,9 +79,23 @@ function accessToken(): string {
   ).trim();
 }
 
+/**
+ * Azure Artifact Signing chains to "Microsoft Identity Verification Root CA 2020", a root that
+ * Windows trusts but the OpenSSL bundles do not ship: the public root is kept next to this
+ * script and handed to osslsigncode for both the signature and the timestamp chain.
+ */
+const MICROSOFT_ROOT = join(
+  import.meta.dirname,
+  "microsoft-identity-verification-root-2020.pem",
+);
+
 function verifyWithOsslsigncode(file: string): string {
-  const result = spawnSync("osslsigncode", ["verify", file], { encoding: "utf8" });
-  if (result.status === 0) return "osslsigncode: signature verified";
+  const result = spawnSync(
+    "osslsigncode",
+    ["verify", "-CAfile", MICROSOFT_ROOT, "-TSA-CAfile", MICROSOFT_ROOT, file],
+    { encoding: "utf8" },
+  );
+  if (result.status === 0) return "osslsigncode: signature and timestamp chains verified";
   throw new Error(`osslsigncode verify failed for ${file}: ${result.stdout}${result.stderr}`);
 }
 
