@@ -20,5 +20,6 @@ Le chiavi vivono nei secret di GitHub o nel keychain locale; gli script leggono 
 
 - `pnpm package:release` fallisce se l'identità indicata manca, se la notarizzazione non è `Accepted`, se la configurazione Windows è parziale o se una dipendenza ha licenza incompatibile.
 - `release.yml` pubblica su tag `v*`; i job Windows e macOS girano su macos-latest per riusare la stessa catena di packaging (motivazione in firma.md).
+- I secret Apple stanno nell'ambiente GitHub `macos-release` (solo `main` e tag `v*`), come quelli Azure in `windows-release`; i tag `v*` sono protetti da un ruleset.
 - Un contributo esterno al repository accetta la GPL; non esiste un CLA.
-- Resta aperto il costo di Azure Artifact Signing: la decisione di attivarlo è di business, non tecnica, e non blocca le release.
+- Azure Artifact Signing usa l'account già pagato per Strata: nessun costo aggiuntivo; se venisse chiuso, i pacchetti Windows escono non firmati e le release non si bloccano.

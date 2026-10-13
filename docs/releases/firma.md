@@ -37,11 +37,13 @@ Script: `scripts/release/sign-mac.ts`, `scripts/release/notarize-mac.ts`, `scrip
 4. DMG dall'app già stapled, firmato con `--timestamp` (senza hardened runtime, non è codice), notarizzato e stapled a sua volta.
 5. Valutazione Gatekeeper: `spctl -a -vvv -t exec <app>` e `spctl -a -t open --context context:primary-signature -v <dmg>`. Con notarizzazione un rifiuto blocca la release; senza notarizzazione il verdetto è solo riportato nel riepilogo.
 
-Credenziali di notarizzazione, in ordine: profilo keychain `OCTO_NOTARY_PROFILE`; oppure una **chiave API di App Store Connect** (`MACOS_NOTARY_KEY_PATH` al file `.p8`, `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_ISSUER_ID`), che non richiede password per app; oppure `MACOS_APPLE_ID` + `MACOS_APPLE_TEAM_ID` + `MACOS_APPLE_APP_PASSWORD` (accettati anche i vecchi `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`). Prima dell'invio lo script esegue `notarytool history` come preflight.
+Credenziali di notarizzazione, in ordine: profilo keychain `OCTO_NOTARY_PROFILE`; oppure una **chiave API di App Store Connect** (`MACOS_NOTARY_KEY_PATH` al file `.p8`, `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_ISSUER_ID`), che non richiede password per app; oppure `MACOS_APPLE_ID` + `MACOS_APPLE_TEAM_ID` + `MACOS_APPLE_APP_PASSWORD` (accettati anche i vecchi `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`). Prima dell'invio lo script esegue `notarytool history` come preflight. Gli esiti (`notary-result-<target>-app.json` e `-dmg.json`) sono nell'artefatto `notarization-diagnostics` del run e il job `publish` li allega alla release.
 
 La chiave API si genera su App Store Connect → Utenti e accesso → Integrazioni → App Store Connect API → Chiavi del team (ruolo Developer o superiore): il file `AuthKey_<ID>.p8` si scarica una sola volta; Key ID e Issuer ID sono mostrati nella pagina. In locale: `xcrun notarytool store-credentials octo-release-local --key AuthKey_<ID>.p8 --key-id <ID> --issuer <ISSUER>`. In CI: secret `MACOS_NOTARY_KEY_BASE64` (base64 del `.p8`), `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_ISSUER_ID`; il workflow scrive la chiave in `$RUNNER_TEMP` solo per la durata del job.
 
-### Secret GitHub (repository)
+### Secret GitHub (ambiente `macos-release`)
+
+I secret Apple vivono nell'**ambiente `macos-release`**, non nel repository: il job `macos` dichiara `environment: macos-release`, che accetta solo il ramo `main` e i tag `v*` (come `windows-release`). Un ramo qualunque lanciato a mano non può quindi firmare con il Developer ID. GitHub non mostra più un secret dopo il salvataggio: per inserirli o ruotarli si usa `scripts/release/set-macos-secrets.sh`, che non contiene valori, chiede i file locali (`.p12`, `.p8`) e le password con `read -s` e invia tutto a `gh secret set --env macos-release` via stdin.
 
 | Secret | Contenuto |
 | --- | --- |
@@ -54,6 +56,12 @@ La chiave API si genera su App Store Connect → Utenti e accesso → Integrazio
 | `MACOS_NOTARY_KEY_BASE64`, `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_ISSUER_ID` | Alternativa senza password: chiave API di App Store Connect (`.p8` in base64, Key ID, Issuer ID) |
 
 Senza `MACOS_CERT_P12_BASE64` il job macOS produce pacchetti non firmati e `UNSIGNED.txt` lo dichiara.
+
+**Dry run.** `gh workflow run release.yml --ref main` costruisce, firma e notarizza senza pubblicare (il job `publish` parte solo su un tag). Da un altro ramo l'ambiente rifiuta il job: per collaudare una modifica al workflow si aggiunge temporaneamente il ramo alle policy dell'ambiente e lo si toglie dopo l'unione.
+
+**Rotazione.** Si genera un nuovo certificato o una nuova chiave API, si rilancia lo script (Invio salta i valori già corretti) e si verifica con un dry run da `main`. Il vecchio certificato o la vecchia chiave si revoca su Apple solo dopo il dry run verde.
+
+**Protezioni del repository.** Un ruleset impedisce di creare, spostare o cancellare i tag `v*` a chi non è admin e vieta force push e cancellazione su `main`; non richiede pull request, perché il repository ha un solo collaboratore.
 
 ### Esecuzione locale
 
@@ -89,6 +97,8 @@ Su host Windows (`process.platform === "win32"`) lo script delega a `scripts/ci/
 5. Assegnare al service principal il ruolo `Artifact Signing Certificate Profile Signer` soltanto sul certificate profile scelto (profilo Public Trust, non PublicTrustTest).
 
 Finché la variabile `AZURE_ARTIFACT_SIGNING_ENDPOINT` è vuota il job Windows salta login e firma e pubblica pacchetti non firmati.
+
+**Costo.** Azure Artifact Signing è a pagamento. L'account usato oggi (`strata-signing-fm`, profilo `strata-public`, endpoint nord Europa) è lo stesso già pagato e usato per Strata: Octo Core non aggiunge un abbonamento. Se quell'account venisse chiuso basta svuotare la variabile dell'endpoint e i pacchetti Windows escono non firmati, con `SHA256SUMS.txt` e `UNSIGNED.txt`. In alternativa gratuita il progetto, pubblico e GPL, può chiedere l'ammissione a SignPath Foundation.
 
 ### Esecuzione locale da macOS
 
