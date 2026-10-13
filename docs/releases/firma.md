@@ -98,6 +98,14 @@ Su host Windows (`process.platform === "win32"`) lo script delega a `scripts/ci/
 
 Finché la variabile `AZURE_ARTIFACT_SIGNING_ENDPOINT` è vuota il job Windows salta login e firma e pubblica pacchetti non firmati.
 
+### GitHub environment `github-pages`
+
+GitHub crea questo environment da solo con la regola "solo il ramo `main`". Il job `pages` di `release.yml` gira però sul ref del tag: senza una regola aggiuntiva per i tag `v*` il deploy del sito viene rifiutato ("not allowed to deploy to github-pages due to environment protection rules") e la release resta pubblicata con il sito fermo alla versione precedente. Aggiungere la regola (Settings → Environments → github-pages → Deployment branches and tags → tag `v*`, oppure `gh api -X POST repos/<owner>/<repo>/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag`). Rimedio se è già successo: `gh workflow run pages.yml --ref main -f tag=vX.Y.Z`.
+
+### Secret di un environment: tutti o nessuno
+
+Un secret definito nell'environment prevale su quello omonimo del repository, uno per uno. Un insieme parziale (per esempio solo il certificato) combina il certificato dell'environment con la password e l'identità del repository: la firma fallisce con errori fuorvianti (`Unable to decode the provided data`, `signing identity … is not in the keychain`). Quando si spostano i secret Apple nell'environment `macos-release`, impostarli tutti nella stessa sessione dello script, o nessuno.
+
 **Costo.** Azure Artifact Signing è a pagamento. L'account usato oggi (`strata-signing-fm`, profilo `strata-public`, endpoint nord Europa) è lo stesso già pagato e usato per Strata: Octo Core non aggiunge un abbonamento. Se quell'account venisse chiuso basta svuotare la variabile dell'endpoint e i pacchetti Windows escono non firmati, con `SHA256SUMS.txt` e `UNSIGNED.txt`. In alternativa gratuita il progetto, pubblico e GPL, può chiedere l'ammissione a SignPath Foundation.
 
 ### Esecuzione locale da macOS
