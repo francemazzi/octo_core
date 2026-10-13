@@ -28,7 +28,8 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
     case "capture.frame":
       return engine.ingestFrame(command);
     case "capture.image":
-      return engine.captureImage(command);
+      // How OCR went so far rides on every reply: the dashboard pauses when it keeps failing.
+      return { ...engine.captureImage(command), ocr: engine.ocrHealth() };
     case "analysis.run":
       return engine.runAnalysis(command.mode, command.sessionId);
     case "model.status":
@@ -78,6 +79,12 @@ export async function dispatch(engine: Engine, command: EngineCommand): Promise<
       return engine.chatSend(command);
     case "chat.history":
       return { messages: engine.chatHistory(command.sessionId) };
+    case "readiness.status":
+      return engine.readinessStatus(command.capture);
+    case "model.pull":
+      return engine.pullModel(command.role);
+    case "keys.unlock":
+      return engine.unlockKeys(command.key);
     default:
       throw new OctoError("invalid_payload", "unknown command");
   }
@@ -91,6 +98,12 @@ const SLOW_COMMANDS: ReadonlySet<EngineCommand["cmd"]> = new Set([
   "export.run",
   "report.tick",
   "session.delete",
+]);
+/** Commands that wait on the network: they answer on their own, never holding Pausa or Stop. */
+const CONCURRENT_COMMANDS: ReadonlySet<EngineCommand["cmd"]> = new Set([
+  "model.configure",
+  "readiness.status",
+  "model.pull",
 ]);
 const SHUTDOWN_WAIT_MS = 5_000;
 
@@ -165,8 +178,7 @@ export function createProtocolHandler(engine: Engine, write: Write) {
         lane = lane.then(() => respond(request.id, request.command));
         return false;
       }
-      // Checking a key waits on the network: it must not hold Pausa or Stop behind it.
-      if (request.command.cmd === "model.configure") {
+      if (CONCURRENT_COMMANDS.has(request.command.cmd)) {
         void respond(request.id, request.command);
         return false;
       }

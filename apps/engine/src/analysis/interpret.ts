@@ -10,7 +10,13 @@ import type {
   ModelEvidence,
   ModelReply,
 } from "./model-adapter.js";
-import { auditNetwork, perimeterEvidence, reservedByActivities, toEvidence } from "./perimeter.js";
+import {
+  auditNetwork,
+  perimeterEvidence,
+  readableEvidence,
+  reservedByActivities,
+  toEvidence,
+} from "./perimeter.js";
 import { acceptModelOutput, type DataMode } from "./policy.js";
 import { recordRun, type RunOutcome } from "./runs.js";
 
@@ -30,6 +36,7 @@ export type InterpretReason =
   | "model_unavailable"
   | "remote_unavailable"
   | "no_evidence"
+  | "unreadable_evidence"
   | "model_error"
   | "unusable_output";
 
@@ -88,18 +95,21 @@ export async function interpretSession(
   }
   const rows = perimeterEvidence(deps.db, adapter, input);
   if (rows.length === 0) return { output: null, model: null, reason: "no_evidence" };
-  const plan = planBatches(rows, MAX_BATCH_EVIDENCE, MAX_ANALYSIS_BATCHES);
+  const readable = readableEvidence(deps.readText, rows);
+  if (readable.rows.length === 0) return unreadableRun(deps, adapter, input, rows.length);
+  const plan = planBatches(readable.rows, MAX_BATCH_EVIDENCE, MAX_ANALYSIS_BATCHES);
   const coverage: Coverage = {
     analysisId: randomUUID(),
-    evidenceTotal: plan.evidenceTotal,
+    evidenceTotal: rows.length,
     evidenceSent: plan.evidenceSent,
     batches: plan.batches.length,
   };
+  const textDeps = { ...deps, readText: readable.readText };
   const outputs: ModelOutput[] = [];
   let model: string | null = null;
   for (const [index, batch] of plan.batches.entries()) {
     const known = outputs.length > 0 ? knownActivities(mergeOutputs(outputs)) : [];
-    const evidence = toEvidence(deps, batch, reservedByActivities(known));
+    const evidence = toEvidence(textDeps, batch, reservedByActivities(known));
     const result = await callWithRetry({ deps, adapter, input, coverage, index, evidence, known });
     model = result.model ?? model;
     if (result.output) outputs.push(result.output);
@@ -114,6 +124,26 @@ export async function interpretSession(
     model,
     reason: "accepted",
   };
+}
+
+/** Nothing of the session can be read any more: recorded as unavailable, no model is called. */
+function unreadableRun(
+  deps: InterpretDeps,
+  adapter: ModelAdapter,
+  input: Input,
+  evidenceTotal: number,
+): InterpretResult {
+  recordRun(deps.db, {
+    sessionId: input.sessionId,
+    mode: input.mode,
+    model: "unknown",
+    provider: adapter.provider,
+    promptSchema: adapter.promptSchema,
+    outcome: "unavailable",
+    at: deps.nowWall(),
+    detail: { error: "unreadable_evidence", evidenceTotal, evidenceSent: 0, input: [] },
+  });
+  return { output: null, model: null, reason: "unreadable_evidence" };
 }
 
 async function callWithRetry(call: Call): Promise<CallResult> {

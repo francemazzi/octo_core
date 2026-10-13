@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { RemoteProvider } from "@octo/contracts";
 import { providerLabel, type UiRemote } from "../shared/ui-state.js";
+import { failureMessage } from "./ipc-error.js";
 
 type Props = { remote: UiRemote; onClose: () => void };
 
@@ -29,7 +30,7 @@ export function Settings({ remote, onClose }: Props) {
       setApiKey("");
       setMessage(done);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Operazione non riuscita.");
+      setError(failureMessage(failure));
     } finally {
       setBusy(false);
     }

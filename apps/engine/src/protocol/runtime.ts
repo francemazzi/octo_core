@@ -11,7 +11,12 @@ import {
   type AnalysisProfile,
   type ModelAdapter,
 } from "../analysis/model-adapter.js";
-import { createOllamaAdapter, isLoopbackUrl, ollamaBase } from "../analysis/ollama.js";
+import {
+  createOllamaAdapter,
+  isLoopbackUrl,
+  LIGHT_CHAT_MODEL,
+  ollamaBase,
+} from "../analysis/ollama.js";
 import {
   createOpenRouterAdapter,
   DEFAULT_OPENROUTER_MAX_TOKENS,
@@ -20,8 +25,10 @@ import {
 import type { RemoteModels } from "../analysis/remote-slot.js";
 import { createOllamaOcr, DEFAULT_OCR_MODEL, type OcrReader } from "../capture/ocr.js";
 import type { EngineOptions } from "../create-engine.js";
+import { HostKeyProvider } from "../crypto/key-provider.js";
 import { DEFAULT_FRAME_SPAN_MS } from "../domain/frame-timeline.js";
 import { OctoError } from "../errors.js";
+import type { OllamaWiring } from "../readiness/status.js";
 
 const positiveIntSchema = z.coerce.number().int().positive();
 
@@ -33,6 +40,8 @@ export function runtimeOptions(env: NodeJS.ProcessEnv = process.env): EngineOpti
   return {
     nowMono: () => Math.round(performance.now()),
     nowWall: () => new Date().toISOString(),
+    // The desktop keeps the media key in the system keystore and hands it over (`keys.unlock`).
+    ...(env.OCTO_KEY_SOURCE === "host" ? { keyProvider: new HostKeyProvider() } : {}),
     ...modelWiring(env),
   };
 }
@@ -40,8 +49,20 @@ export function runtimeOptions(env: NodeJS.ProcessEnv = process.env): EngineOpti
 /** The models of the engine process without its clocks, so tests can drive time. */
 export function modelWiring(
   env: NodeJS.ProcessEnv,
-): Pick<EngineOptions, "analysis" | "remoteModels" | "ocr"> {
-  return { analysis: analysisProfile(env), remoteModels: remoteModels(env), ocr: ocrReader(env) };
+): Pick<EngineOptions, "analysis" | "remoteModels" | "ocr" | "ollama"> {
+  return {
+    analysis: analysisProfile(env),
+    remoteModels: remoteModels(env),
+    ocr: ocrReader(env),
+    ollama: ollamaWiring(env),
+  };
+}
+
+/** Ollama on this computer, for readiness and downloads; nothing when it is not loopback. */
+export function ollamaWiring(env: NodeJS.ProcessEnv): OllamaWiring | undefined {
+  const base = ollamaBase(env);
+  if (!isLoopbackUrl(base)) return undefined;
+  return { base, chatModel: env.OCTO_OLLAMA_MODEL?.trim() || LIGHT_CHAT_MODEL };
 }
 
 /** Screenshots are read by a local vision model unless `OCTO_OCR=off`. */

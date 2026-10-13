@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { chatHistoryCommandSchema, chatSendCommandSchema } from "./chat.js";
+import {
+  keysUnlockCommandSchema,
+  modelPullCommandSchema,
+  readinessStatusCommandSchema,
+} from "./readiness.js";
 
 export const timeIntervalSchema = z.object({
   sourceId: z.string().min(1),
@@ -269,6 +274,9 @@ export const engineCommandSchema = z.discriminatedUnion("cmd", [
   }),
   chatSendCommandSchema,
   chatHistoryCommandSchema,
+  readinessStatusCommandSchema,
+  modelPullCommandSchema,
+  keysUnlockCommandSchema,
 ]);
 
 export type EngineCommand = z.infer<typeof engineCommandSchema>;

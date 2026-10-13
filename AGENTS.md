@@ -1,6 +1,6 @@
 # Istruzioni per agenti (Codex e altri)
 
-Repository: **Octo Core** — app desktop Windows-first, monorepo pnpm + TypeScript strict, motore Node figlio, gate per fase A00–A13. Leggi [README.md](./README.md) e [roadmap.md](./roadmap.md) prima di implementare.
+Repository: **Octo Core** — app desktop Windows-first, monorepo pnpm + TypeScript strict, motore Node figlio, gate per fase A00–A14. Leggi [README.md](./README.md) e [roadmap.md](./roadmap.md) prima di implementare.
 
 Regole Cursor equivalenti: [.cursor/rules/clean-code.mdc](./.cursor/rules/clean-code.mdc), [.cursor/rules/integration-gates.mdc](./.cursor/rules/integration-gates.mdc).
 

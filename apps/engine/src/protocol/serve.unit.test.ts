@@ -74,6 +74,10 @@ describe("protocol handler", () => {
         offsetMs: 0,
         imageBase64: "x",
       });
+      expect(reply("img")).toMatchObject({
+        ok: true,
+        result: { accepted: true, ocr: { consecutiveFailures: 0, lastError: null } },
+      });
       mono = 31_000;
       await send("pause", { cmd: "session.pause" });
       expect(reply("pause")).toMatchObject({ ok: true, result: { capture: "paused" } });
@@ -87,6 +91,12 @@ describe("protocol handler", () => {
 
       await send("start-2", start);
       expect(reply("start-2")?.result?.sessionId).not.toBe(first);
+      // Readiness answers while the analysis holds the slow lane, and refuses a model name.
+      await send("ready", { cmd: "readiness.status", capture: "synthetic" });
+      await new Promise((done) => setTimeout(done, 0));
+      expect(reply("ready")).toMatchObject({ ok: true, result: { missing: [], ready: true } });
+      await send("evil", { cmd: "model.pull", model: "evil" });
+      expect(reply("evil")).toMatchObject({ ok: false, error: { code: "invalid_payload" } });
       ocrText.resolve("ordine cliente Rossi");
       modelGate.resolve();
       await handler.idle();

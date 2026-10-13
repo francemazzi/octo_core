@@ -1,3 +1,9 @@
+import { UNREADABLE_TEXT } from "../shared/readiness-text.js";
+
+/** After Stop with neither a local model nor a remote key: nothing can analyse the session. */
+export const NO_MODEL_NOTE =
+  "Nessun modello per l'analisi: scaricane uno da «Prima di registrare» o inserisci una chiave nelle Impostazioni, poi premi Analizza.";
+
 export const PERMISSION_NOTE =
   "Octo non vede lo schermo: concedi il permesso Registrazione schermo in Impostazioni di Sistema > Privacy e sicurezza, poi riavvia Octo.";
 
@@ -16,10 +22,14 @@ function modelLine(extracted: AnalysisReply, local: boolean, remoteLabel: string
   if (extracted.model) {
     if (!local && extracted.reason === "already_analyzed")
       return `Analisi già presente (${extracted.model}).`;
-    return local ? `Ollama acceso (${extracted.model}).` : `${remoteLabel} (${extracted.model}).`;
+    return local ? `Modello locale: ${extracted.model}.` : `${remoteLabel} (${extracted.model}).`;
   }
   if (extracted.reason === "no_evidence") return "Nessuna schermata letta.";
-  return local ? "Ollama spento." : `${remoteLabel} non ha risposto.`;
+  if (extracted.reason === "unreadable_evidence") return UNREADABLE_TEXT;
+  if (!local) return `${remoteLabel} non ha risposto.`;
+  return extracted.reason === "model_unavailable"
+    ? "Nessun modello locale disponibile (Ollama spento o senza modello)."
+    : "Il modello locale non ha risposto.";
 }
 
 /** One line after an analysis: model state, what was extracted, coverage, mini report. */

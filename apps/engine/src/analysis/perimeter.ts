@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { recordAudit } from "../storage/audit.js";
 import type { Sql } from "../storage/db.js";
 import { textCharsFor } from "./batches.js";
 import type { KnownActivity, ModelAdapter, ModelEvidence } from "./model-adapter.js";
@@ -46,6 +46,37 @@ export function perimeterEvidence(
   return rows.filter((row) => allowed.has(row.id));
 }
 
+export type ReadableEvidence = {
+  rows: EvidenceRow[];
+  readText: (assetId: string) => string;
+  unreadable: number;
+};
+
+/**
+ * Evidence whose text can still be read. Screenshots kept by Octo 1.2 and earlier were encrypted
+ * with a key that did not survive a restart: they are left out and counted, never sent.
+ */
+export function readableEvidence(
+  readText: (assetId: string) => string,
+  rows: EvidenceRow[],
+): ReadableEvidence {
+  const texts = new Map<string, string>();
+  const readable = rows.filter((row) => {
+    if (!row.asset_id) return true;
+    try {
+      texts.set(row.asset_id, readText(row.asset_id));
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  return {
+    rows: readable,
+    readText: (assetId) => texts.get(assetId) ?? "",
+    unreadable: rows.length - readable.length,
+  };
+}
+
 /** Prompt characters the activities of earlier batches take before the screen text. */
 export function reservedByActivities(known: readonly KnownActivity[]): number {
   return known.reduce(
@@ -76,19 +107,14 @@ export function auditNetwork(
   ids: string[],
   adapter: ModelAdapter,
 ): void {
-  deps.db
-    .prepare(
-      `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
-       VALUES (?, ?, ?, 'network', ?)`,
-    )
-    .run(
-      randomUUID(),
-      sessionId,
-      deps.nowWall(),
-      JSON.stringify({
-        evidenceIds: ids,
-        provider: adapter.provider,
-        ...(adapter.workspaceId ? { workspaceId: adapter.workspaceId } : {}),
-      }),
-    );
+  recordAudit(deps.db, {
+    sessionId,
+    at: deps.nowWall(),
+    action: "network",
+    detail: {
+      evidenceIds: ids,
+      provider: adapter.provider,
+      ...(adapter.workspaceId ? { workspaceId: adapter.workspaceId } : {}),
+    },
+  });
 }

@@ -27,6 +27,12 @@ export function orderedDisplays(): Display[] {
   return [primary, ...others];
 }
 
+export type CaptureListeners = {
+  onError: (message: string) => void;
+  /** The engine's reply to each screenshot, with how reading has gone so far. */
+  onReply: (result: unknown) => void;
+};
+
 /**
  * Takes a screenshot of each selected display every `intervalMs` and hands it to the engine,
  * which reads the text locally and drops the image. Ticks never overlap; `stop()` waits for
@@ -35,7 +41,7 @@ export function orderedDisplays(): Display[] {
 export function createScreenCapture(
   request: EngineRequest,
   intervalMs: number,
-  onError: (message: string) => void,
+  listeners: CaptureListeners,
 ): ScreenCapture {
   let timer: ReturnType<typeof setInterval> | undefined;
   let running: Promise<void> | undefined;
@@ -55,7 +61,7 @@ export function createScreenCapture(
         sources.find((item) => display && item.display_id === String(display.id)) ?? sources[index];
       if (!source || source.thumbnail.isEmpty()) continue;
       const offsetMs = Date.now() - startedAt;
-      await request(
+      const reply = await request(
         {
           cmd: "capture.image",
           frameId: `scr-${startedAt}-${offsetMs}-${sourceId}`,
@@ -65,6 +71,7 @@ export function createScreenCapture(
         },
         30_000,
       );
+      listeners.onReply(reply.result);
     }
   }
 
@@ -72,7 +79,7 @@ export function createScreenCapture(
     if (running) return;
     running = tick()
       .catch((error: unknown) => {
-        onError(
+        listeners.onError(
           error instanceof Error
             ? `Cattura non riuscita: ${error.message}`
             : "Cattura non riuscita.",

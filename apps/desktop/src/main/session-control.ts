@@ -3,8 +3,9 @@ import { providerLabel } from "../shared/ui-state.js";
 import { ANALYSIS_TIMEOUT_MS, type SessionDetail } from "@octo/contracts";
 import { initialUiState, type Pending, type UiSource, type UiState } from "../shared/ui-state.js";
 import type { EngineRequest } from "./engine-client.js";
-import { analysisNote, describeError, PERMISSION_NOTE } from "./notes.js";
+import { analysisNote, describeError, NO_MODEL_NOTE, PERMISSION_NOTE } from "./notes.js";
 import { answerNote, fetchQuestions, parseAnswer, parseId } from "./questions.js";
+import { afterStopAction, pauseCauseFor, type ReadinessControl } from "./readiness.js";
 import { assertRemoteUnchanged } from "./remote-guard.js";
 import type { ScreenCapture } from "./screen-capture.js";
 import { fetchDetail, fetchSessions } from "./sessions.js";
@@ -18,11 +19,13 @@ export type ControlDeps = {
   capture: ScreenCapture;
   /** `OCTO_CAPTURE=synthetic` (tests): fixed frames instead of screenshots. */
   synthetic: boolean;
-  /** `OCTO_MODEL=off` turns the analysis after Stop off. */
-  analyse: boolean;
+  /** Avvia and Riprendi go through it; after Stop it says which model can analyse. */
+  readiness: Pick<ReadinessControl, "ensureReady" | "current">;
   sources: () => UiSource[];
   screenAllowed: () => boolean;
   publish: (state: UiState) => void;
+  /** Brings the dashboard forward: an automatic pause or a consent waits for the operator. */
+  attention: () => void;
 };
 
 /**
@@ -100,6 +103,33 @@ export function createSessionControl(deps: ControlDeps) {
     }
   }
 
+  /** The local model analyses at once; with only a remote one its consent opens, never a send. */
+  function afterStop(sessionId: string): void {
+    const action = afterStopAction(deps.readiness.current(), state.remote.available);
+    if (action === "local") {
+      void analyse(sessionId);
+      return;
+    }
+    if (action === "consent") {
+      state.focus = { sessionId, at: Date.now(), consent: true };
+      deps.attention();
+      return;
+    }
+    state.note = NO_MODEL_NOTE;
+  }
+
+  const pause = () =>
+    transition("pausing", "Pausa non riuscita", async () => {
+      if (state.capture !== "recording") return;
+      const settled = deps.capture.stop();
+      await deps.request({ cmd: "session.pause" });
+      state.capture = "paused";
+      await settled;
+      if (deps.synthetic && state.activeSessionId) {
+        await syntheticFrames.afterPause(deps.request, state.activeSessionId);
+      }
+    });
+
   function selectedSources(payload: unknown): string[] {
     const known = new Set(state.sources.map((source) => source.id));
     const ids = Array.isArray(payload)
@@ -135,6 +165,7 @@ export function createSessionControl(deps: ControlDeps) {
     start: (payload: unknown) =>
       transition("starting", "Avvio non riuscito", async () => {
         const ids = selectedSources(payload);
+        await deps.readiness.ensureReady();
         const reply = await deps.request({
           cmd: "session.start",
           projectId: "desktop",
@@ -155,22 +186,14 @@ export function createSessionControl(deps: ControlDeps) {
         deps.capture.start(ids, origin());
         if (!deps.screenAllowed()) state.note = PERMISSION_NOTE;
       }),
-    pause: () =>
-      transition("pausing", "Pausa non riuscita", async () => {
-        if (state.capture !== "recording") return;
-        const settled = deps.capture.stop();
-        await deps.request({ cmd: "session.pause" });
-        state.capture = "paused";
-        await settled;
-        if (deps.synthetic && state.activeSessionId) {
-          await syntheticFrames.afterPause(deps.request, state.activeSessionId);
-        }
-      }),
+    pause,
     resume: () =>
       transition("resuming", "Ripresa non riuscita", async () => {
         if (state.capture !== "paused") return;
+        await deps.readiness.ensureReady();
         await deps.request({ cmd: "session.resume" });
         state.capture = "recording";
+        state.pauseCause = null;
         if (deps.synthetic && state.activeSessionId) {
           await syntheticFrames.afterResume(
             deps.request,
@@ -190,8 +213,9 @@ export function createSessionControl(deps: ControlDeps) {
         state.capture = "idle";
         state.activeSessionId = null;
         state.startedWall = null;
+        state.pauseCause = null;
         await settled;
-        if (sessionId && deps.analyse) void analyse(sessionId);
+        if (sessionId) afterStop(sessionId);
       }),
     analyze(payload: unknown): UiState {
       void analyse(parseId(payload, "sessione"));
@@ -231,6 +255,17 @@ export function createSessionControl(deps: ControlDeps) {
     focus(sessionId: string | null): void {
       state.focus = { sessionId, at: Date.now() };
       publish();
+    },
+    /**
+     * Each screenshot reply says how reading went: when it keeps failing, pause and say why.
+     * Not awaited: the pause waits for the very screenshot tick that delivered this reply.
+     */
+    captureReply(payload: unknown): void {
+      const cause = pauseCauseFor(payload);
+      if (!cause || state.capture !== "recording" || state.pending || state.pauseCause) return;
+      state.pauseCause = cause;
+      void pause();
+      deps.attention();
     },
     reportCaptureError(message: string): void {
       state.error = deps.screenAllowed() ? message : PERMISSION_NOTE;

@@ -101,10 +101,11 @@ export function createRemoteModel(deps: {
           30_000,
         );
         // Verify without switching, persist atomically, then refresh the active adapter if necessary.
+        // The first key saved when no provider exists at all becomes the default: one key is enough.
         deps.store.save(config.provider, config);
-        if (active === config.provider) {
-          deps.store.select(active);
-          await configure(active);
+        if (active === null || active === config.provider) {
+          deps.store.select(config.provider);
+          await configure(config.provider);
         }
       });
     },

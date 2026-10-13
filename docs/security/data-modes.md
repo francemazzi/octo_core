@@ -29,8 +29,29 @@ Con `OCTO_CAPTURE=screen` (default del desktop) Octo fa uno screenshot degli sch
 
 - L'immagine va solo all'engine sullo stesso computer. Il testo lo legge un modello di visione su Ollama in loopback (`glm-ocr`, `OCTO_OCR_MODEL`; `OCTO_OCR=off` lo spegne). L'immagine non viene salvata: resta solo il testo, mascherato, minimizzato e cifrato come evidenza.
 - Uno screenshot uguale al precedente non crea un'evidenza nuova ma un `frame_repeat`, così il tempo resta contato.
-- Una lettura fallita scrive l'audit `ocr_failed` (id del frame ed errore, mai il testo).
+- Una lettura fallita scrive l'audit `ocr_failed` (id del frame ed errore, mai il testo). I codici `ollama_unreachable` (Ollama non risponde), `ollama_timeout` (troppo lento), `ocr_model_missing` (modello non installato) e `remote_model` (modello cloud) indicano un computer non pronto: sono contati di fila e ogni risposta a `capture.image` porta il conteggio. Il desktop mette in pausa la registrazione dopo 2 di questi errori di fila, o dopo 3 timeout, e spiega il motivo; una lettura riuscita azzera il conteggio. Un testo illeggibile (`ocr_failed`) non conta. Al massimo tre schermate aspettano dietro a quella in lettura: oltre, la nuova schermata è saltata (`ocr_busy`, audit `ocr_skipped` con l'id del frame), così un computer lento riduce la copertura invece di accumulare immagini in memoria e di trattenere l'analisi dopo Stop.
 - Su macOS serve il permesso "Registrazione schermo"; senza, la dashboard lo dice e non registra contenuti.
+
+## Prima di registrare
+
+Il desktop non avvia né riprende una registrazione finché la lista «Prima di registrare» non è completa. Il motore la calcola (`readiness.status`, con la modalità di cattura), il desktop la fa rispettare:
+
+- **Archivio sicuro** per la chiave dei media (vedi sotto).
+- **Ollama** raggiungibile su loopback e **modello OCR** installato su questo computer: richiesti solo con la cattura `screen`. Un modello OCR cloud non conta. Con `OCTO_OCR=off` la cattura `screen` non parte.
+- **Un modello di analisi**: un modello di chat di Ollama in loopback oppure un provider remoto configurato (chiave nelle Impostazioni o nell'ambiente). La prima chiave salvata quando nessun provider è attivo diventa quello predefinito; non esiste fallback da un provider all'altro.
+
+**Download dei modelli.** Dalla lista l'operatore può far scaricare a Ollama il modello OCR (`glm-ocr`, o `OCTO_OCR_MODEL`) e un modello di chat leggero (`qwen3.5:4b`, o `OCTO_OLLAMA_MODEL`). Il renderer invia solo il ruolo (`ocr` o `chat`): il nome lo decide il motore, che parla solo con Ollama su loopback (`POST /api/pull`). È Ollama a scaricare i pesi dal proprio registry: nessuna evidenza, chiave o dato di sessione lascia il computer. Un download alla volta; senza avanzamento per 120 s si interrompe. Ogni download scrive l'audit `model_pull` (ruolo, modello, esito: `started`, `completed`, `failed` con il codice). "Installa Ollama" apre soltanto `https://ollama.com/download` nel browser.
+
+**Dopo Stop.** Se c'è un modello locale, l'analisi `local_only` parte da sola. Se c'è solo il provider remoto, la conferma (destinatario, modello, numero di schermate, nessuna immagine) si apre da sola; niente parte senza "Invia", e la conferma vale per quella sessione.
+
+## Chiave dei media
+
+Il testo delle schermate è cifrato con una chiave di 32 byte. Il desktop la crea al primo avvio e la conserva in `media-key.bin` nella cartella dati, cifrata con `safeStorage` (Keychain, DPAPI, libsecret); al motore la consegna con `keys.unlock` (`OCTO_KEY_SOURCE=host`), mai nei log, nelle risposte o negli audit. Così una sessione resta leggibile dopo aver chiuso Octo o riavviato il computer.
+
+- Senza un archivio sicuro (Linux con backend `basic_text`) la chiave non si crea e la registrazione non parte.
+- Se `media-key.bin` non si apre più (profilo utente ricreato, cartella copiata su un altro computer), il file viene rinominato `media-key.bin.unreadable-<ms>` e non cancellato, Octo crea una chiave nuova e la dashboard lo dice: le sessioni registrate prima non sono più leggibili.
+- Ogni envelope porta `kid`, un'impronta pubblica della chiave: una schermata cifrata con un'altra chiave dà `media_key_mismatch`, distinto da `tampered_ciphertext`. L'analisi salta le schermate illeggibili; se nessuna è leggibile registra un run `unavailable` con `unreadable_evidence` senza chiamare il modello.
+- `OCTO_MEDIA_KEY=memory` (solo sviluppo e test, ignorato dall'app installata) tiene la chiave in memoria come prima della 1.3.
 
 
 ## Assistente della sessione
@@ -43,5 +64,5 @@ Nel dettaglio di una sessione **ferma** l'operatore può fare domande all'assist
 - Prima di ogni chiamata remota viene scritto l'audit `network` con gli id inviati e il provider. Ogni chiamata è registrata in `analysis_runs` con `prompt_schema = chat@1`, modalità, modello, copertura, esito e uso; non conta mai come ultima analisi della sessione.
 - La risposta è accettata solo come JSON con `answer` e `citations`. Le citazioni vengono verificate contro le evidenze inviate e le attività della sessione: quelle inesistenti sono scartate e annotate nel run (`issues.unknownCitations`); senza citazioni valide la risposta è mostrata come "non verificata". Una risposta vuota è `invalid_model_output` e la domanda non viene salvata.
 - Il testo delle schermate e ogni etichetta, riassunto, nota o risposta sono dati non fidati nel prompt: un'istruzione scritta in una schermata non cambia modalità, perimetro né attività. L'assistente non modifica mai le attività: le correzioni restano un'azione esplicita della persona.
-- Dopo un riavvio la chiave dei media non persiste: le schermate di una sessione precedente non sono leggibili, l'assistente risponde dalle attività e dalle risposte già date, e la risposta è `partial` (`unreadable` nel run).
+- Le schermate registrate con Octo 1.2 o precedenti, o cifrate con una chiave messa da parte, non sono leggibili: l'assistente risponde dalle attività e dalle risposte già date, e la risposta è `partial` (`unreadable` nel run).
 - La risposta accettata a una domanda del modello resta sull'attività come **dichiarazione dell'operatore** (`operator_note`): appare nel dettaglio, nel DOCX e in `activity.json` etichettata come tale, mai come evidenza.

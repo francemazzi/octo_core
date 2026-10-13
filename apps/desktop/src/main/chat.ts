@@ -35,7 +35,8 @@ export function parseChatSend(payload: unknown): ChatSendInput {
 
 const ENGINE_MESSAGES: Record<string, string> = {
   session_active: "Ferma la sessione prima di chiedere all'assistente.",
-  model_unavailable: "Ollama è spento o non ha un modello: l'assistente locale non può rispondere.",
+  model_unavailable:
+    "Nessun modello locale: scaricalo da «Prima di registrare» o scegli il provider remoto.",
   remote_unavailable: "Nessun provider remoto configurato.",
   invalid_model_output: "L'assistente non ha dato una risposta leggibile. Riprova.",
   remote_unreachable: "Il provider remoto non risponde: controlla la connessione e riprova.",

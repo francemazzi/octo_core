@@ -12,7 +12,7 @@ import { EngineError, type EngineRequest } from "./engine-client.js";
 vi.mock("electron", () => ({ app: {} }));
 afterEach(() => vi.unstubAllGlobals());
 const KEY = "octo-test-key-abcd";
-function setup() {
+function setup(env: NodeJS.ProcessEnv = { OCTO_MODEL: "off", OPENROUTER_API_KEY: KEY }) {
   const dir = mkdtempSync(join(tmpdir(), "octo-remote-test-"));
   const file = join(dir, "settings.json");
   const store = createSettingsStore(file, {
@@ -20,7 +20,7 @@ function setup() {
     encrypt: (text) => Buffer.from(Buffer.from(text).map((byte) => byte ^ 90)),
     decrypt: (data) => Buffer.from(data.map((byte) => byte ^ 90)).toString(),
   });
-  const engine = createEngine(dir, modelWiring({ OCTO_MODEL: "off", OPENROUTER_API_KEY: KEY }));
+  const engine = createEngine(dir, modelWiring(env));
   const request: EngineRequest = async (command) => {
     try {
       return {
@@ -54,6 +54,25 @@ function setup() {
 }
 
 describe("remote settings orchestration", () => {
+  it("makes the first key the default when no provider exists, so one key is enough", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ data: [] })),
+    );
+    const test = setup({ OCTO_MODEL: "off" });
+    try {
+      await test.remote.boot();
+      expect(test.state()).toMatchObject({ provider: null, available: false });
+      expect(await test.remote.save({ provider: "anthropic", apiKey: KEY })).toBeNull();
+      expect(test.state()).toMatchObject({ provider: "anthropic", available: true });
+      expect(test.store.active()).toBe("anthropic");
+      expect(await test.remote.save({ provider: "openrouter", apiKey: KEY })).toBeNull();
+      expect(test.state().provider).toBe("anthropic");
+    } finally {
+      test.engine.close();
+    }
+  });
+
   it("saves without switching, persists selection, removes without cross-provider fallback", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

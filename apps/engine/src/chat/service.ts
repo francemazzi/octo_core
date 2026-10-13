@@ -6,8 +6,8 @@ import type { ConverseReply } from "../analysis/model-adapter.js";
 import {
   auditNetwork,
   perimeterEvidence,
+  readableEvidence,
   toEvidence,
-  type EvidenceRow,
 } from "../analysis/perimeter.js";
 import { recordRun, type RunOutcome } from "../analysis/runs.js";
 import { OctoError } from "../errors.js";
@@ -22,35 +22,6 @@ import { parseChatReply, validateChatReply } from "./reply.js";
 import { insertChatMessages, listChatMessages } from "./store.js";
 
 export type ChatSendInput = { sessionId: string; text: string; mode: ChatMode };
-
-type ReadableEvidence = {
-  rows: EvidenceRow[];
-  readText: (assetId: string) => string;
-  unreadable: number;
-};
-
-/**
- * Evidence whose text can still be read: the media key does not survive a restart, so an older
- * session keeps its activities but loses its screen text. What cannot be read is not sent, and
- * the answer is marked partial.
- */
-function readableEvidence(deps: InterpretDeps, batch: EvidenceRow[]): ReadableEvidence {
-  const texts = new Map<string, string>();
-  const rows = batch.filter((row) => {
-    if (!row.asset_id) return true;
-    try {
-      texts.set(row.asset_id, deps.readText(row.asset_id));
-      return true;
-    } catch {
-      return false;
-    }
-  });
-  return {
-    rows,
-    readText: (assetId) => texts.get(assetId) ?? "",
-    unreadable: batch.length - rows.length,
-  };
-}
 
 /**
  * The session assistant: one model call per question, over the evidence perimeter of the
@@ -78,7 +49,7 @@ export function createChatService(deps: InterpretDeps) {
     }
     const rows = perimeterEvidence(db, adapter, input);
     const plan = planBatches(rows, MAX_BATCH_EVIDENCE, 1);
-    const readable = readableEvidence(deps, plan.batches[0] ?? []);
+    const readable = readableEvidence(deps.readText, plan.batches[0] ?? []);
     const coverage = { evidenceTotal: plan.evidenceTotal, evidenceSent: readable.rows.length };
     const partial = coverage.evidenceSent < coverage.evidenceTotal;
     const described = describeSession(db, input.sessionId);

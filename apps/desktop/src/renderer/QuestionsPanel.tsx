@@ -1,5 +1,6 @@
 import type { SessionQuestion } from "@octo/contracts";
 import { useState } from "react";
+import { failureMessage } from "./ipc-error.js";
 
 export function QuestionsPanel({ questions }: { questions: SessionQuestion[] }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -13,7 +14,7 @@ export function QuestionsPanel({ questions }: { questions: SessionQuestion[] }) 
       await action();
       setDrafts((current) => ({ ...current, [questionId]: "" }));
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Operazione non riuscita.");
+      setError(failureMessage(failure));
     } finally {
       setBusy(null);
     }

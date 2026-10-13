@@ -2,19 +2,18 @@ import { MAX_BATCH_EVIDENCE, MAX_CHAT_TEXT_CHARS } from "@octo/contracts/limits"
 import type { ChatMessage, ChatMode } from "@octo/contracts";
 import { useEffect, useState } from "react";
 import { providerLabel, type UiRemote } from "../shared/ui-state.js";
+import { failureMessage } from "./ipc-error.js";
 import { RemoteConsent } from "./RemoteConsent.js";
 
 type Props = {
   sessionId: string;
   evidenceCount: number;
   remote: UiRemote;
+  /** The local model, or null: then the remote one answers, after its confirmation. */
+  localModel: string | null;
   /** An analysis is running: the engine's slow lane is taken. */
   busy: boolean;
 };
-
-function describe(failure: unknown): string {
-  return failure instanceof Error ? failure.message : "Operazione non riuscita.";
-}
 
 function remoteTarget(remote: UiRemote) {
   return {
@@ -33,15 +32,19 @@ function citationText(citation: ChatMessage["citations"][number]): string {
  * Questions about a stopped session, answered with citations the engine verified. The first
  * remote question of a session asks for the same consent as a remote analysis.
  */
-export function ChatPanel({ sessionId, evidenceCount, remote, busy }: Props) {
+export function ChatPanel({ sessionId, evidenceCount, remote, localModel, busy }: Props) {
+  const cloudAllowed = remote.available && remote.provider !== null && remote.model !== null;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
-  const [mode, setMode] = useState<ChatMode>("local_only");
+  // Until the operator picks, the default follows the models: remote when there is no local one.
+  const [picked, setPicked] = useState<ChatMode | null>(null);
+  const mode: ChatMode =
+    picked ?? (localModel === null && cloudAllowed ? "cloud_after_review" : "local_only");
   const [consented, setConsented] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const cloudAllowed = remote.available && remote.provider !== null && remote.model !== null;
+  const noModel = localModel === null && !cloudAllowed;
 
   useEffect(() => {
     let current = true;
@@ -51,7 +54,7 @@ export function ChatPanel({ sessionId, evidenceCount, remote, busy }: Props) {
         if (current) setMessages(history);
       })
       .catch((failure: unknown) => {
-        if (current) setError(describe(failure));
+        if (current) setError(failureMessage(failure));
       });
     return () => {
       current = false;
@@ -71,7 +74,7 @@ export function ChatPanel({ sessionId, evidenceCount, remote, busy }: Props) {
       setMessages(await window.octo.chatHistory(sessionId));
       setText("");
     } catch (failure) {
-      setError(describe(failure));
+      setError(failureMessage(failure));
     } finally {
       setSending(false);
     }
@@ -160,22 +163,28 @@ export function ChatPanel({ sessionId, evidenceCount, remote, busy }: Props) {
               aria-label="Modello dell'assistente"
               value={mode}
               disabled={sending}
-              onChange={(event) => setMode(event.target.value as ChatMode)}
+              onChange={(event) => setPicked(event.target.value as ChatMode)}
             >
-              <option value="local_only">Ollama (locale)</option>
+              {localModel !== null ? <option value="local_only">Ollama (locale)</option> : null}
               <option value="cloud_after_review">{providerLabel(remote.provider)}</option>
             </select>
           ) : null}
           <button
             type="submit"
             className="primary"
-            disabled={sending || busy || text.trim().length === 0}
+            disabled={sending || busy || noModel || text.trim().length === 0}
           >
             Chiedi
           </button>
           {sending ? <span className="muted">L'assistente sta leggendo la sessione…</span> : null}
         </div>
       </form>
+      {noModel ? (
+        <p className="muted">
+          Per usare l'assistente serve un modello: scaricane uno da «Prima di registrare» o
+          inserisci una chiave nelle Impostazioni.
+        </p>
+      ) : null}
       {error ? <p role="alert">{error}</p> : null}
     </section>
   );

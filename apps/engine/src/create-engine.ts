@@ -8,10 +8,11 @@ import {
   segmentIsValid,
 } from "@octo/capture-adapter";
 import { loadSessionOracle } from "@octo/test-fixtures";
-import type { EconomicsInput } from "@octo/contracts";
+import type { CaptureMode, EconomicsInput, PullRole } from "@octo/contracts";
 import { createImageQueue, type ImageFrame } from "./capture/image-queue.js";
 import { ingestFrame, nextSequence } from "./capture/ingest.js";
 import type { OcrReader } from "./capture/ocr.js";
+import { createOcrMonitor } from "./capture/ocr-health.js";
 import { InMemoryKeyProvider, type KeyProvider } from "./crypto/key-provider.js";
 import { computeEconomics } from "./domain/economics.js";
 import { assertSingleEpoch, durationFromOffsets, sessionDurationMs } from "./sessions/clock.js";
@@ -29,7 +30,10 @@ import { applyRetention, evaluateQuota } from "./jobs/quota.js";
 import { readDiagnostic, writeDiagnostic } from "./diagnostics/log.js";
 import { exportSessionTree, type ReportSnapshot } from "./reports/export.js";
 import { approveSessionEvidence } from "./review/approval.js";
+import { projectCorrections } from "./review/corrections.js";
 import { confirmEpisode, mergeEpisodes, reassignInterval, splitEpisode } from "./review/service.js";
+import { createReadiness, type OllamaWiring } from "./readiness/status.js";
+import { recordAudit } from "./storage/audit.js";
 import { openDatabase, type Sql } from "./storage/db.js";
 import { MediaStore } from "./storage/media-store.js";
 
@@ -43,6 +47,8 @@ export type EngineOptions = {
   /** Builds the remote model from a key the operator sets in the app (`model.configure`). */
   remoteModels?: RemoteModels;
   ocr?: OcrReader;
+  /** Ollama on this computer: readiness checks and model downloads. */
+  ollama?: OllamaWiring;
 };
 
 type SessionRow = {
@@ -59,7 +65,7 @@ type SessionRow = {
 export function createEngine(dataDir: string, options: EngineOptions = {}) {
   mkdirSync(dataDir, { recursive: true });
   const db = openDatabase(join(dataDir, "octo.db"));
-  const keys = options.keyProvider ?? new InMemoryKeyProvider();
+  const keys: KeyProvider = options.keyProvider ?? new InMemoryKeyProvider();
   const media = new MediaStore(db, dataDir, keys);
   const jobs = new JobRunner(db);
   const oracle = loadSessionOracle();
@@ -72,6 +78,7 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
   const nowMono = options.nowMono ?? (() => mono);
   const nowWall = options.nowWall ?? (() => wall);
   const quotaThreshold = options.quotaThresholdBytes ?? 1_000_000;
+  const ocrMonitor = createOcrMonitor({ db, nowWall, sessionId: () => active()?.id ?? null });
   const images = createImageQueue({
     ocr: options.ocr,
     accept: (sourceId) => {
@@ -91,34 +98,24 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
           wall: nowWall(),
         });
     },
-    onFailure: (frameId, error) => {
-      db.prepare(
-        `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
-         VALUES (?, ?, ?, 'ocr_failed', ?)`,
-      ).run(
-        randomUUID(),
-        active()?.id ?? null,
-        nowWall(),
-        JSON.stringify({
-          frameId,
-          error: error instanceof OctoError ? error.code : "internal",
-          message: error instanceof Error ? error.message.slice(0, 200) : "",
-        }),
-      );
-    },
+    onFailure: (frameId, error) => ocrMonitor.failed(frameId, error),
+    onRead: () => ocrMonitor.reset(),
+    onSkipped: (frameId, waiting) =>
+      recordAudit(db, {
+        sessionId: active()?.id ?? null,
+        at: nowWall(),
+        action: "ocr_skipped",
+        detail: { frameId, waiting },
+      }),
   });
   const profile = options.analysis ?? fixtureProfile();
   const remote = createRemoteSlot({
     profile,
     models: options.remoteModels,
     audit: (detail) =>
-      db
-        .prepare(
-          `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
-           VALUES (?, NULL, ?, 'model_configured', ?)`,
-        )
-        .run(randomUUID(), nowWall(), JSON.stringify(detail)),
+      recordAudit(db, { sessionId: null, at: nowWall(), action: "model_configured", detail }),
   });
+
   const readText = (assetId: string) => media.readPlaintext(assetId).toString("utf8");
   const analysis = createAnalysisService({
     db,
@@ -128,6 +125,16 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
     requireSession: () => requireSession(),
   });
   const chat = createChatService({ db, profile, readText, nowWall });
+  const readiness = createReadiness({
+    ollama: options.ollama,
+    ocrModel: options.ocr?.model ?? null,
+    localProvider: profile.models.local?.provider ?? null,
+    localStatus: () => analysis.modelStatus(),
+    remoteStatus: () => remote.status(),
+    keystore: () => keys.available,
+    audit: (detail) =>
+      recordAudit(db, { sessionId: null, at: nowWall(), action: "model_pull", detail }),
+  });
 
   function active(): SessionRow | undefined {
     return db
@@ -241,6 +248,7 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
       }
       const session = requireSession();
       addEvent(session, "start", 0);
+      ocrMonitor.reset();
       return { sessionId, capture: "recording" as const, startedWall };
     },
     transition(to: CaptureState): void {
@@ -262,6 +270,7 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
     },
     resumeSession(): void {
       this.transition("recording");
+      ocrMonitor.reset();
     },
     stopSession(): void {
       this.transition("stopped");
@@ -379,6 +388,21 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
     async modelStatus() {
       return { ...(await analysis.modelStatus()), remote: await remote.status() };
     },
+    readinessStatus(capture: CaptureMode) {
+      return readiness.status(capture);
+    },
+    /** Starts one allowlisted download; progress is read back through `readinessStatus`. */
+    pullModel(role: PullRole) {
+      return readiness.pull(role);
+    },
+    ocrHealth() {
+      return ocrMonitor.health();
+    },
+    unlockKeys(keyBase64: string) {
+      if (!keys.unlock) throw new OctoError("key_source", "this engine keeps its key in memory");
+      keys.unlock(Buffer.from(keyBase64, "base64"));
+      return { unlocked: true };
+    },
     configureRemoteModel(input: Parameters<typeof remote.configure>[0]) {
       return remote.configure(input);
     },
@@ -488,10 +512,12 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
           if (latest.status === "cancelled") return { skipped: true };
         }
         if (job.type === "audit-once") {
-          db.prepare(
-            `INSERT INTO audit_events (id, session_id, wall_time, action, detail_json)
-             VALUES (?, ?, ?, 'job_effect', '{}')`,
-          ).run(randomUUID(), job.session_id, nowWall());
+          recordAudit(db, {
+            sessionId: job.session_id,
+            at: nowWall(),
+            action: "job_effect",
+            detail: {},
+          });
         }
         return { applied: true };
       });
@@ -580,26 +606,7 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
       return jobs.list();
     },
     corrections(projectId: string) {
-      return {
-        add(note: string) {
-          const id = randomUUID();
-          db.prepare(
-            `INSERT INTO corrections (id, project_id, episode_id, note, revoked_at) VALUES (?, ?, NULL, ?, NULL)`,
-          ).run(id, projectId, note);
-          return id;
-        },
-        revoke(id: string) {
-          db.prepare("UPDATE corrections SET revoked_at = ? WHERE id = ?").run(nowWall(), id);
-        },
-        active() {
-          return db
-            .prepare("SELECT * FROM corrections WHERE project_id = ? AND revoked_at IS NULL")
-            .all(projectId);
-        },
-        trainingExport() {
-          return [] as unknown[];
-        },
-      };
+      return projectCorrections(db, projectId, nowWall);
     },
     media,
     networkAudits() {

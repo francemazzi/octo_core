@@ -27,11 +27,20 @@ export type EngineRequest = (
   timeoutMs?: number,
 ) => Promise<EngineReply>;
 
+/**
+ * Development and tests only (`OCTO_MEDIA_KEY=memory`): the CI has no system keystore, so the
+ * media key stays in the engine's memory. An installed app always keeps it in the keystore.
+ */
+export function memoryMediaKey(): boolean {
+  return !app.isPackaged && process.env.OCTO_MEDIA_KEY === "memory";
+}
+
 function spawnEngine(dataDir: string, here: string): ChildProcessWithoutNullStreams {
   const env = {
     ...process.env,
     OCTO_DATA_DIR: dataDir,
     OCTO_CAPTURE: process.env.OCTO_CAPTURE ?? "screen",
+    OCTO_KEY_SOURCE: memoryMediaKey() ? "memory" : "host",
   };
   if (app.isPackaged) {
     return spawn(process.execPath, [join(process.resourcesPath, "engine.mjs")], {

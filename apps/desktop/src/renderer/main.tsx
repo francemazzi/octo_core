@@ -5,6 +5,7 @@ import { Mascot } from "./Mascot.js";
 import "./app.css";
 import "./dashboard.css";
 import "./mascot.css";
+import "./readiness.css";
 
 const view = new URLSearchParams(window.location.search).get("view") ?? "dashboard";
 document.documentElement.dataset.view = view;

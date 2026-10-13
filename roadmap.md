@@ -48,7 +48,7 @@ Acquisire tutto un monitor non significa leggere finestre mai aperte, database o
 ```mermaid
 flowchart LR
   subgraph autoTrack [Binario A automatico]
-    A00 --> A01 --> A02 --> A03 --> A04 --> A05 --> A06 --> A07 --> A08 --> A09 --> A10 --> A11 --> A12 --> A13
+    A00 --> A01 --> A02 --> A03 --> A04 --> A05 --> A06 --> A07 --> A08 --> A09 --> A10 --> A11 --> A12 --> A13 --> A14
   end
   subgraph sideTracks [Non bloccano A]
     B[Binario B Windows e modello live]
@@ -90,6 +90,7 @@ Ogni fase **A** termina con **un solo** file sotto `tests/integration/`:
 | A11 | `tests/integration/A11.video-capture-port.test.ts` |
 | A12 | `tests/integration/A12.hardening-simulated.test.ts` |
 | A13 | `tests/integration/A13.session-assistant.test.ts` |
+| A14 | `tests/integration/A14.readiness.test.ts` |
 
 Requisiti comuni:
 
@@ -114,7 +115,7 @@ Non segnare come completata: verifica Windows eseguita solo su macOS come prova 
 | Motore | Processo Node figlio; messaggi JSON newline-delimited su stdin/stdout | Test avviano il motore senza Electron; main Electron = supervisore |
 | IPC desktop | Preload tipizzato → main → stdio verso engine | Nessun accesso diretto del renderer a DB/chiavi |
 | SQLite | Preferire `node:sqlite` del Node bundled con Electron scelto; altrimenti `better-sqlite3` + rebuild in ADR | Scelta unica in A01 |
-| Chiavi | AES-256-GCM; interfaccia `KeyProvider` | Test: chiave in memoria; produzione: `safeStorage` avvolge data-key [S4]. Keystore assente → registrazione non parte |
+| Chiavi | AES-256-GCM; interfaccia `KeyProvider` | Test: chiave in memoria; produzione: `safeStorage` avvolge data-key [S4] (`media-key.bin` + `HostKeyProvider`, A14). Keystore assente → registrazione non parte |
 | Cattura | `CaptureAdapter`; default test/dev: `SyntheticCaptureAdapter` (`OCTO_CAPTURE=synthetic`) | `ElectronDesktopCaptureAdapter` in A11. Due monitor non supportati → capability `single_monitor` esplicita; il binario A continua |
 | Video | Porta `MediaEncoder`; test scrive contenitore deterministico senza audio | Codec reale = binario B |
 | Analisi | `ModelAdapter` senza tool shell/file/rete; default `local_only`; LangGraph checkpointer su SQLite; mock da fixture | Live = binario B |
@@ -463,6 +464,24 @@ Invarianti obbligatorie:
 
 ---
 
+## Fase A14 — Pronto prima di registrare
+
+**Dipendenze:** A13. **Origine:** un operatore ha registrato tre sessioni senza Ollama: ogni schermata è stata scartata senza avviso e le sessioni sono rimaste vuote.
+
+- [x] **A14.01 — Stato di prontezza.** Comando `readiness.status {capture}`: archivio sicuro della chiave, Ollama raggiungibile su loopback, modello OCR installato e locale (solo cattura `screen`), almeno un modello di analisi (locale o remoto). `missing` in ordine fisso; risposta fuori dalla lane lenta.
+- [x] **A14.02 — Modelli dall'app.** Comando `model.pull {role}`: solo i ruoli `ocr` (`glm-ocr`) e `chat` (`qwen3.5:4b`, o `OCTO_OLLAMA_MODEL`), mai un nome dal renderer; un download alla volta, avanzamento nello stato, interruzione dopo 120 s senza dati; audit `model_pull` (avvio, fine, errore). Nessuna evidenza lascia il computer.
+- [x] **A14.03 — Avvio e ripresa condizionati.** Il desktop rifiuta Avvia e Riprendi finché la lista «Prima di registrare» non è completa (motore permissivo, così i test di protocollo restano indipendenti da Ollama); lista con azioni: "Installa Ollama" (solo `https://ollama.com/download`), "Scarica modello di lettura", "Scarica modello locale", "Inserisci una chiave"; la prima chiave salvata senza provider attivo diventa predefinita.
+- [x] **A14.04 — Salute OCR e pausa automatica.** Errori OCR con codici `ollama_unreachable`, `ollama_timeout`, `ocr_model_missing`, `remote_model`; contatore dei fallimenti consecutivi nella risposta di `capture.image`; il desktop mette in pausa dopo 2 errori bloccanti o 3 timeout di fila e spiega il motivo; al massimo tre schermate in attesa di lettura, oltre `ocr_busy` con audit `ocr_skipped`.
+- [x] **A14.05 — Dopo Stop.** Analisi locale se c'è un modello locale; altrimenti la conferma del provider remoto si apre da sola (consenso per sessione invariato); l'assistente usa il remoto quando manca il locale; errori IPC senza il prefisso di Electron.
+- [x] **A14.06 — Chiave dei media persistente.** `media-key.bin` cifrato con `safeStorage`, consegnato al motore con `keys.unlock` (`HostKeyProvider`, solo con `OCTO_KEY_SOURCE=host`); `kid` nell'envelope distingue una chiave persa (`media_key_mismatch`) da una manomissione; evidenze illeggibili saltate dall'analisi (`unreadable_evidence`); file illeggibile spostato da parte, nuova chiave e avviso.
+- [x] **A14.G — Gate A14.** `pnpm gate A14` verde.
+
+**Test di integrazione:** `tests/integration/A14.readiness.test.ts` — Ollama finto su loopback: cosa manca per `screen` e `synthetic`, modello OCR cloud rifiutato, download con avanzamento, `pull_busy`, allowlist, audit, nessun audit `network`; pausa automatica con il vero controllo di sessione del desktop e ripresa solo a sistema pronto; tre timeout di fila; chiave che sopravvive a tre processi motore e mai nelle risposte; desktop dalla lista ad Avvia; conferma remota aperta allo Stop; archivio sicuro richiesto e sessione leggibile dopo il riavvio dell'app.
+
+**Binario B:** B09 — prontezza su Windows via Desktop remoto (installazione Ollama, download dall'app, velocità OCR su CPU, pausa chiudendo Ollama).
+
+---
+
 ## Binario B — Windows e modello live
 
 **Non blocca il binario A.** Stato iniziale consigliato: `pending`. Evidenze in `docs/testing/B.md`.
@@ -477,6 +496,7 @@ Invarianti obbligatorie:
 | B06 | Smoke OpenRouter sintetico; tetto costo; `LIVE_PENDING` se assente | `pnpm test:model:live` |
 | B07 | Export riprodotto su secondo PC Windows | checklist B |
 | B08 | Revisione visiva DOCX in Word | checklist B |
+| B09 | Prontezza su Windows via Desktop remoto: installazione Ollama, download dei modelli dall'app, OCR e `qwen3.5:4b` su CPU, pausa chiudendo Ollama | checklist B |
 
 Se due monitor non sono stabili: capability `single_monitor` in produzione; B02 resta `failed` o `skipped` con ADR, **senza** riaprire A05–A10.
 
@@ -511,6 +531,7 @@ Macro-F1 ≥ 0,80 sul modello reale è **indicatore pilot** (C06), non criterio 
 | **M0 — Flusso sintetico** | A00–A05 | Oracolo, archivio, cattura sintetica e tempo corretto |
 | **M1 — Intelligenza e dataset** | A06–A09 | Policy AI mock, episodi, review, DOCX/export |
 | **M2 — Desktop e hardening** | A10–A12 | Shell Electron, video/porta reale, fault simulati |
+| **M3 — Uso reale** | A13–A14 | Assistente con citazioni; registrazione solo a computer pronto, pausa se la lettura si ferma, sessioni leggibili dopo il riavvio |
 
 Il **pilot utilizzabile** (M4 storico) = A12 verde + `gate:release` (B + C). Procedere per gate A, non per data fissa.
 

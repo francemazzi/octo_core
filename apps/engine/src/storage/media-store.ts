@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { decryptAesGcm, encryptAesGcm, sha256, type Envelope } from "../crypto/aes.js";
+import { decryptAesGcm, encryptAesGcm, keyId, sha256, type Envelope } from "../crypto/aes.js";
 import type { KeyProvider } from "../crypto/key-provider.js";
+import { OctoError } from "../errors.js";
 import type { Sql } from "./db.js";
 
 export class MediaStore {
@@ -52,7 +53,11 @@ export class MediaStore {
       .get(assetId) as { path: string } | undefined;
     if (!row) throw new Error(`asset ${assetId} is not valid`);
     const envelope = JSON.parse(readFileSync(row.path, "utf8")) as Envelope;
-    return decryptAesGcm(this.keys.getDataKey(), envelope);
+    const key = this.keys.getDataKey();
+    if (envelope.kid && envelope.kid !== keyId(key)) {
+      throw new OctoError("media_key_mismatch", "encrypted with another media key");
+    }
+    return decryptAesGcm(key, envelope);
   }
 
   tamper(assetId: string): void {

@@ -86,9 +86,33 @@ describe("local OCR", () => {
     });
     await expect(tagged.read("aW1n")).rejects.toMatchObject({ code: "remote_model" });
     const missing = createOllamaOcr({ base: BASE, fetchImpl: ollama([], [], urls) });
-    await expect(missing.read("aW1n")).rejects.toMatchObject({ code: "ocr_failed" });
-    await expect(missing.read("aW1n")).rejects.toMatchObject({ code: "ocr_failed" });
+    await expect(missing.read("aW1n")).rejects.toMatchObject({ code: "ocr_model_missing" });
+    await expect(missing.read("aW1n")).rejects.toMatchObject({ code: "ocr_model_missing" });
     expect(urls.filter((url) => url.endsWith("/api/tags"))).toHaveLength(4);
     expect(urls.some((url) => url.endsWith("/api/chat"))).toBe(false);
+  });
+
+  it("names a stopped or slow Ollama, so the dashboard can pause the recording", async () => {
+    const refused = createOllamaOcr({
+      base: BASE,
+      fetchImpl: (() => Promise.reject(new TypeError("fetch failed"))) as typeof fetch,
+    });
+    await expect(refused.read("aW1n")).rejects.toMatchObject({ code: "ollama_unreachable" });
+    const slow = createOllamaOcr({
+      base: BASE,
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        if (String(input).endsWith("/api/tags")) return Response.json({ models: GLM });
+        throw new DOMException("The operation timed out.", "TimeoutError");
+      }) as typeof fetch,
+    });
+    await expect(slow.read("aW1n")).rejects.toMatchObject({ code: "ollama_timeout" });
+    const removed = createOllamaOcr({
+      base: BASE,
+      fetchImpl: (async (input: RequestInfo | URL) =>
+        String(input).endsWith("/api/tags")
+          ? Response.json({ models: GLM })
+          : new Response("model not found", { status: 404 })) as typeof fetch,
+    });
+    await expect(removed.read("aW1n")).rejects.toMatchObject({ code: "ocr_model_missing" });
   });
 });

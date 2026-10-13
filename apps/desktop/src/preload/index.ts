@@ -26,6 +26,9 @@ const api: OctoBridge = {
   installUpdate: () => ipcRenderer.invoke("octo:installUpdate"),
   chatSend: (input: ChatSendInput) => ipcRenderer.invoke("octo:chatSend", input),
   chatHistory: (sessionId: string) => ipcRenderer.invoke("octo:chatHistory", sessionId),
+  pullModel: (role) => ipcRenderer.invoke("octo:pullModel", role),
+  installOllama: () => ipcRenderer.invoke("octo:installOllama"),
+  checkReadiness: () => ipcRenderer.invoke("octo:checkReadiness"),
   onState: (callback: (state: UiState) => void) => {
     const listener = (_event: unknown, state: UiState) => callback(state);
     ipcRenderer.on("octo:state", listener);

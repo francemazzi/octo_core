@@ -7,7 +7,7 @@ Superfici e trattamento. Il residuo non è «zero rischio».
 | Screenshot | Contenuti sensibili sul monitor | Solo sorgenti scelte; maschera prima del disco; cifratura AES-GCM | Metadati in chiaro (vedi plaintext-metadata) |
 | Notifiche e titoli | Testo di altre app nel frame | Minimizzazione e maschere; niente OCR verso rete in `local_only` | Un titolo può restare nel payload mascherato |
 | Video | Stesse informazioni degli screenshot, più persistenti | Segmenti non finalizzati non sono `valid`; niente audio | Codec reale solo sul binario B |
-| Chiavi | Lettura della data-key | Test: chiave in memoria o file nel data dir temporaneo. Produzione: `safeStorage`. Keystore assente → la registrazione non parte | Dev key sul disco di test |
+| Chiavi | Lettura della data-key | Test: chiave in memoria (`OCTO_MEDIA_KEY=memory`, solo app non installata). Produzione: `media-key.bin` cifrato con `safeStorage`, consegnato al motore via stdin (`keys.unlock`), mai in log o audit. Keystore assente → la registrazione non parte | Chi esegue codice come l'utente può chiedere a `safeStorage` di decifrare; una copia della cartella dati su un altro PC è illeggibile |
 | Log | Pixel o segreti nei log | Il log diagnostico scarta marker e payload; stdout è solo protocollo | Timestamp e id restano |
 | Checkpoint | Stato del grafo con id evidenze | SQLite locale, stesso data dir della sessione | Un backup del data dir copia anche i checkpoint |
 | Export | Path traversal, HTML | Id sanitizzati; destinazione esplicita; escape in `indice.html` | Il DOCX è in chiaro per essere letto |

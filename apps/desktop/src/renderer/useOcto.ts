@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { initialUiState, type UiState } from "../shared/ui-state.js";
+import { failureMessage } from "./ipc-error.js";
 
 /** The state main publishes; every window renders from it. */
 export function useOctoState(): UiState {
@@ -20,7 +21,7 @@ export function useAction(): {
   const run = useCallback((action: () => Promise<unknown>) => {
     setError(null);
     action().catch((failure: unknown) => {
-      setError(failure instanceof Error ? failure.message : "Operazione non riuscita.");
+      setError(failureMessage(failure));
     });
   }, []);
   return { run, error };

@@ -1,9 +1,13 @@
+import { ndjsonLines } from "../analysis/ndjson.js";
 import {
+  asOllamaError,
   DEFAULT_OLLAMA_BASE,
   fetchOllamaTags,
   isLoopbackUrl,
   isRemoteOllamaModel,
+  ollamaFetch,
   sameOllamaModel,
+  type OllamaTag,
 } from "../analysis/ollama.js";
 import { OctoError } from "../errors.js";
 
@@ -28,18 +32,48 @@ export function cleanOcrText(raw: string): string {
     .slice(0, MAX_OCR_CHARS);
 }
 
+/** Whether the OCR model is installed, and whether it runs here rather than on ollama.com. */
+export function ocrModelState(
+  tags: OllamaTag[],
+  model: string,
+): { installed: boolean; local: boolean } {
+  const tag = tags.find(
+    (item) => typeof item.name === "string" && sameOllamaModel(item.name, model),
+  );
+  return { installed: tag !== undefined, local: tag !== undefined && !isRemoteOllamaModel(tag) };
+}
+
 /**
  * The OCR model must be installed and run on this computer: the daemon forwards cloud models to
  * ollama.com. Checked before the first screenshot leaves the engine, again after a failure.
  */
 async function assertLocalModel(base: string, model: string, fetchImpl: FetchLike): Promise<void> {
-  const tag = (await fetchOllamaTags(base, fetchImpl)).find(
-    (item) => typeof item.name === "string" && sameOllamaModel(item.name, model),
-  );
-  if (!tag) throw new OctoError("ocr_failed", `${model} is not installed`);
-  if (isRemoteOllamaModel(tag)) {
-    throw new OctoError("remote_model", `${model} runs outside this computer`);
+  const state = ocrModelState(await fetchOllamaTags(base, fetchImpl), model);
+  if (!state.installed) throw new OctoError("ocr_model_missing", `${model} is not installed`);
+  if (!state.local) throw new OctoError("remote_model", `${model} runs outside this computer`);
+}
+
+/** Streams the transcript; a timeout or a dropped connection while reading gets an Ollama code. */
+async function readTranscript(body: ReadableStream<Uint8Array>): Promise<string> {
+  let text = "";
+  let aborted: string | null = null;
+  try {
+    for await (const line of ndjsonLines(body)) {
+      const chunk = JSON.parse(line) as { message?: { content?: string }; error?: string };
+      if (chunk.error) {
+        aborted = chunk.error;
+        break;
+      }
+      text += chunk.message?.content ?? "";
+    }
+  } catch (error) {
+    throw asOllamaError(error);
   }
+  // Ollama aborts dense, repetitive screens (tables) with "token repeat limit reached" after
+  // reading them: keep what was streamed and fail only when nothing was read.
+  const cleaned = cleanOcrText(text);
+  if (cleaned.length === 0 && aborted) throw new OctoError("ocr_failed", aborted);
+  return cleaned;
 }
 
 export function createOllamaOcr(
@@ -55,60 +89,36 @@ export function createOllamaOcr(
     model,
     async read(imageBase64) {
       const fetchImpl = options.fetchImpl ?? fetch;
-      checked ??= assertLocalModel(base, model, fetchImpl).catch((error: unknown) => {
+      try {
+        checked ??= assertLocalModel(base, model, fetchImpl);
+        await checked;
+        const response = await ollamaFetch(
+          `${base}/api/chat`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              model,
+              stream: true,
+              options: { num_ctx: 8_192, num_predict: 1_024, temperature: 0, stop: ["```"] },
+              messages: [{ role: "user", content: "Text Recognition:", images: [imageBase64] }],
+            }),
+            signal: AbortSignal.timeout(60_000),
+          },
+          fetchImpl,
+        );
+        if (response.status === 404) {
+          throw new OctoError("ocr_model_missing", `${model} is not installed`);
+        }
+        if (!response.ok || !response.body) {
+          throw new OctoError("ocr_failed", `ollama ${response.status}`);
+        }
+        return await readTranscript(response.body);
+      } catch (error) {
+        // Ollama may have been closed or the model removed: check again before the next frame.
         checked = null;
         throw error;
-      });
-      await checked;
-      const response = await fetchImpl(`${base}/api/chat`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          model,
-          stream: true,
-          options: { num_ctx: 8_192, num_predict: 1_024, temperature: 0, stop: ["```"] },
-          messages: [{ role: "user", content: "Text Recognition:", images: [imageBase64] }],
-        }),
-        signal: AbortSignal.timeout(60_000),
-      });
-      if (!response.ok || !response.body) {
-        throw new OctoError("ocr_failed", `ollama ${response.status}`);
       }
-      // Ollama aborts dense, repetitive screens (tables) with "token repeat limit reached" after
-      // reading them: keep what was streamed and fail only when nothing was read.
-      let text = "";
-      let aborted: string | null = null;
-      for await (const line of ndjsonLines(response.body)) {
-        const chunk = JSON.parse(line) as { message?: { content?: string }; error?: string };
-        if (chunk.error) {
-          aborted = chunk.error;
-          break;
-        }
-        text += chunk.message?.content ?? "";
-      }
-      const cleaned = cleanOcrText(text);
-      if (cleaned.length === 0 && aborted) throw new OctoError("ocr_failed", aborted);
-      return cleaned;
     },
   };
-}
-
-async function* ndjsonLines(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let end = buffer.indexOf("\n");
-    while (end >= 0) {
-      const line = buffer.slice(0, end).trim();
-      buffer = buffer.slice(end + 1);
-      if (line.length > 0) yield line;
-      end = buffer.indexOf("\n");
-    }
-  }
-  buffer += decoder.decode();
-  if (buffer.trim().length > 0) yield buffer.trim();
 }

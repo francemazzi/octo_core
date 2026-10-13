@@ -1,10 +1,11 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   remoteSettingsSchema,
   legacyRemoteSettingsSchema,
   type RemoteSettingsFile as SettingsFile,
   type RemoteProvider,
 } from "@octo/contracts";
+import { writeFileAtomic } from "./atomic-file.js";
 
 export interface SecretBox {
   problem(): string | null;
@@ -21,9 +22,7 @@ export type RemoteSummary = {
 /** Keys remain OS-keystore ciphertext; migration never decrypts the legacy credential. */
 export function createSettingsStore(file: string, box: SecretBox) {
   function write(settings: SettingsFile): void {
-    const temporary = `${file}.tmp`;
-    writeFileSync(temporary, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
-    renameSync(temporary, file);
+    writeFileAtomic(file, `${JSON.stringify(settings, null, 2)}\n`);
   }
   function read(): SettingsFile {
     if (!existsSync(file)) return { version: 2, activeProvider: null, providers: {} };

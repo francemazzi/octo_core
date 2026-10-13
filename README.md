@@ -8,7 +8,7 @@ Octo Core è un progetto di app desktop Windows-first per documentare come si sv
 
 L'obiettivo è capire **dove viene impiegato tempo, quali passaggi si ripetono e quali miglioramenti meritano una verifica**, senza confondere l'attività sul computer con la produttività della persona.
 
-> **Stato: progettazione dell'MVP.** Il repository contiene la documentazione iniziale; l'applicazione, l'installer e le funzionalità descritte non sono ancora implementati. L'implementazione segue la [roadmap](./roadmap.md) (fasi **A00–A12**, binario automatico).
+> **Stato: MVP in prova.** L'app desktop, il motore e i pacchetti di rilascio esistono e i gate automatici **A00–A14** sono verdi su dati sintetici. Le prove su Windows reale, con modelli live e con dati aziendali restano nei binari B e C della [roadmap](./roadmap.md).
 
 ## Perché esiste
 
@@ -79,7 +79,7 @@ Dettaglio, invarianti e fasi in [roadmap.md](./roadmap.md).
 | **Desktop** | Electron + React + TypeScript; dashboard e mascotte separate |
 | **Motore** | Processo Node figlio; JSON newline-delimited su stdin/stdout; testabile senza Electron |
 | **Contratti** | Zod condivisi (`packages/contracts`) |
-| **Persistenza** | SQLite; media cifrati (AES-GCM, `KeyProvider`; in produzione chiavi avvolte con `safeStorage`) |
+| **Persistenza** | SQLite; testo delle schermate cifrato (AES-GCM, `KeyProvider`); la chiave è avvolta con `safeStorage` in `media-key.bin` e sopravvive al riavvio |
 | **Cattura** | `CaptureAdapter` — sintetico in sviluppo/test; Electron reale in fase A11 |
 | **Analisi** | LangGraph.js + `ModelAdapter` (mock/default `local_only`; OpenRouter opzionale) |
 | **Report** | `docx` da ReportModel validato |
@@ -117,13 +117,14 @@ L'acquisizione riguarda il contenuto visibile delle sorgenti autorizzate: non co
 
 Lo **sviluppo del binario A** (implementazione continua) è pensato per girare su **macOS e CI**: cattura sintetica, mock del modello, nessuna rete obbligatoria. Le prove su **PC Windows**, lo **smoke OpenRouter** e le **approvazioni umane** sono binari **B** e **C**: possono restare `pending` senza bloccare le fasi A.
 
-Ogni fase **A00–A12** si chiude solo quando passa `pnpm gate Axx`, cioè un **test di integrazione deterministico** nominato in roadmap (più i test unitari della fase). Il dettaglio è in [roadmap.md § Contratto del test di integrazione](./roadmap.md#3-contratto-del-test-di-integrazione).
+Ogni fase **A00–A14** si chiude solo quando passa `pnpm gate Axx`, cioè un **test di integrazione deterministico** nominato in roadmap (più i test unitari della fase). Il dettaglio è in [roadmap.md § Contratto del test di integrazione](./roadmap.md#3-contratto-del-test-di-integrazione).
 
 | Milestone | Fasi A | Risultato dimostrabile (automatico) |
 | --- | --- | --- |
 | **M0 — Flusso sintetico** | A00–A05 | Fixture oracolo, archivio, tempo e evidenze da cattura sintetica |
 | **M1 — Intelligenza e export** | A06–A09 | Episodi, policy AI mock, revisione, DOCX e cartelle |
 | **M2 — Desktop e hardening** | A10–A12 | Shell Electron, video/porta cattura, fault simulati |
+| **M3 — Uso reale** | A13–A14 | Assistente con citazioni; registrazione solo a computer pronto, pausa se la lettura si ferma, sessioni leggibili dopo il riavvio |
 
 Il **pilot** non è una milestone di codice: richiede A12 verde e `pnpm gate:release` (binari B + C).
 
@@ -144,9 +145,21 @@ pnpm gate:release    # pilot: Windows, modello live, checklist umane
 
 **Primo traguardo di prodotto (M1):** ricostruire la sessione della fixture oracolo con poche correzioni, tempi riconciliati con l'unione degli intervalli e un DOCX da cui capire quale problema approfondire — dimostrato dai gate A07–A09, senza dipendere da hardware Windows.
 
+## Prima di registrare
+
+Octo registra solo quando può leggere e analizzare ciò che registra. Nella finestra principale, sopra **Avvia**, la lista **Prima di registrare** mostra cosa manca e come sistemarlo; Avvia resta spento finché la lista non è completa, e si aggiorna da sola ogni pochi secondi.
+
+1. **Ollama.** Va installato e avviato sul computer che registra (in Desktop remoto: sul computer remoto). **Installa Ollama** apre la pagina di download.
+2. **Modello di lettura.** **Scarica modello di lettura** fa scaricare a Ollama `glm-ocr`, con l'avanzamento: niente terminale.
+3. **Modello di analisi.** **Scarica modello locale** scarica `qwen3.5:4b`, leggero e adatto a un computer senza GPU; in alternativa **Inserisci una chiave** apre le Impostazioni per OpenRouter o Claude. Basta uno dei due.
+
+Durante la registrazione, se la lettura delle schermate si ferma (Ollama chiuso, modello rimosso, computer troppo lento) Octo **mette in pausa da solo** e dice perché; **Riprendi** torna disponibile quando la lista è di nuovo completa. Dopo **Stop** l'analisi parte con il modello locale; se c'è solo il provider remoto si apre subito la conferma di invio. La chiave che cifra le schermate resta nel keystore del sistema (`media-key.bin`), così una sessione non analizzata resta leggibile dopo aver chiuso Octo. Su Linux senza portachiavi la registrazione non parte.
+
+In sviluppo `OCTO_MEDIA_KEY=memory` tiene la chiave in memoria (serve alla CI senza keystore; l'app installata la ignora). Dettagli e audit in [docs/security/data-modes.md](./docs/security/data-modes.md).
+
 ## Provider remoti: OpenRouter e Claude
 
-In **Impostazioni**, scegli OpenRouter oppure **Claude (Anthropic)**, inserisci la relativa API key e premi **Salva**. Le due chiavi restano separate e cifrate con il keystore del sistema; al renderer tornano soltanto le ultime quattro cifre. **Usa come predefinito** seleziona il provider delle prossime analisi. Il salvataggio di un secondo provider non cambia quello attivo.
+In **Impostazioni**, scegli OpenRouter oppure **Claude (Anthropic)**, inserisci la relativa API key e premi **Salva**. Le due chiavi restano separate e cifrate con il keystore del sistema; al renderer tornano soltanto le ultime quattro cifre. **Usa come predefinito** seleziona il provider delle prossime analisi. La prima chiave salvata, quando nessun provider è attivo, diventa subito quella predefinita; il salvataggio di un secondo provider non cambia quello attivo.
 
 La configurazione OpenRouter precedente viene migrata automaticamente al formato v2, conservando chiave e modello. Il controllo della chiave Anthropic usa `GET /v1/models`, senza evidenze e senza generazione: non garantisce credito disponibile o accesso al modello richiesto. Il modello predefinito è `claude-sonnet-5-5`, modificabile nel campo Modello.
 

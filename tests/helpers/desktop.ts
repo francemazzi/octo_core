@@ -11,7 +11,11 @@ export function electronBinary(): string {
   return output.trim().split("\n").at(-1) ?? output;
 }
 
-/** The built desktop (`pnpm --filter @octo/desktop build`) with synthetic capture and no model. */
+/**
+ * The built desktop (`pnpm --filter @octo/desktop build`) with synthetic capture and the fixture
+ * model, so the list «Prima di registrare» is complete; the media key stays in memory because CI
+ * has no system keystore.
+ */
 export function launch(dataDir: string, env: NodeJS.ProcessEnv = {}): Promise<ElectronApplication> {
   return electron.launch({
     executablePath: electronBinary(),
@@ -20,7 +24,8 @@ export function launch(dataDir: string, env: NodeJS.ProcessEnv = {}): Promise<El
       ...process.env,
       OCTO_DATA_DIR: dataDir,
       OCTO_CAPTURE: "synthetic",
-      OCTO_MODEL: "off",
+      OCTO_MODEL: "fixture",
+      OCTO_MEDIA_KEY: "memory",
       OCTO_REPO_ROOT: process.cwd(),
       ...env,
     },

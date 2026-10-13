@@ -1,12 +1,15 @@
 import type {
   ChatMessage,
   ChatMode,
+  PullRole,
+  Readiness,
   RemoteProvider,
   RemoteModelConfig,
   SessionDetail,
   SessionListItem,
   SessionQuestion,
 } from "@octo/contracts";
+import type { PauseCause } from "./readiness-text.js";
 
 export type Capture = "idle" | "recording" | "paused";
 
@@ -70,8 +73,15 @@ export type UiState = {
   questions: SessionQuestion[];
   remote: UiRemote;
   update: UiUpdate;
-  /** Set when the dashboard should show a session (mascot click, new session, new question). */
-  focus: { sessionId: string | null; at: number } | null;
+  /** What this computer has and lacks before a recording; null while the first check runs. */
+  readiness: Readiness | null;
+  /** Set when Octo paused the recording because reading the screenshots stopped working. */
+  pauseCause: PauseCause | null;
+  /**
+   * Set when the dashboard should show a session (mascot click, new session, new question);
+   * `consent` opens the confirmation for the remote model right away (after Stop, no local model).
+   */
+  focus: { sessionId: string | null; at: number; consent?: boolean } | null;
 };
 
 export const initialUiState: UiState = {
@@ -98,6 +108,8 @@ export const initialUiState: UiState = {
     problem: null,
   },
   update: { status: "none", version: null, progress: null, message: null },
+  readiness: null,
+  pauseCause: null,
   focus: null,
 };
 
@@ -123,6 +135,9 @@ export const OCTO_CHANNELS = [
   "octo:installUpdate",
   "octo:chatSend",
   "octo:chatHistory",
+  "octo:pullModel",
+  "octo:installOllama",
+  "octo:checkReadiness",
 ] as const;
 
 export type OctoChannel = (typeof OCTO_CHANNELS)[number];
@@ -150,5 +165,10 @@ export interface OctoBridge {
   /** Asks the session assistant; resolves with its answer once stored. */
   chatSend(input: ChatSendInput): Promise<ChatMessage>;
   chatHistory(sessionId: string): Promise<ChatMessage[]>;
+  /** Asks Ollama to download the model of one role; progress arrives with the state. */
+  pullModel(role: PullRole): Promise<UiState>;
+  /** Opens the Ollama download page in the browser. */
+  installOllama(): Promise<void>;
+  checkReadiness(): Promise<UiState>;
   onState(callback: (state: UiState) => void): () => void;
 }

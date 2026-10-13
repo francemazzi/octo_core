@@ -11,6 +11,8 @@ import { EPISODES_PROMPT_SCHEMA, EPISODES_SYSTEM_PROMPT, userPrompt } from "./pr
 import { readReply } from "./reply.js";
 
 export const DEFAULT_OLLAMA_BASE = "http://127.0.0.1:11434";
+/** The chat model Octo downloads when asked: small enough for a computer without a GPU. */
+export const LIGHT_CHAT_MODEL = "qwen3.5:4b";
 const PREFERRED_MODELS = [
   "qwen2.5:7b-instruct-q4_K_M",
   "llama3.1:8b",
@@ -52,11 +54,44 @@ export function isRemoteOllamaModel(tag: OllamaTag): boolean {
   return CLOUD_TAG.test((tag.name ?? "").replace(/:latest$/i, ""));
 }
 
+/**
+ * Names the two ways the local daemon fails before answering: too slow (`ollama_timeout`) or not
+ * there at all (`ollama_unreachable`). Any other error is returned as it is.
+ */
+export function asOllamaError(error: unknown): Error {
+  if (!(error instanceof Error)) return new OctoError("ollama_unreachable", String(error));
+  if (error instanceof OctoError) return error;
+  if (error.name === "TimeoutError" || error.name === "AbortError") {
+    return new OctoError("ollama_timeout", "Ollama did not answer in time");
+  }
+  if (error.name === "TypeError") {
+    return new OctoError("ollama_unreachable", "Ollama is not reachable");
+  }
+  return error;
+}
+
+export async function ollamaFetch(
+  url: string,
+  init: RequestInit,
+  fetchImpl: FetchLike = fetch,
+): Promise<Response> {
+  try {
+    return await fetchImpl(url, init);
+  } catch (error) {
+    throw asOllamaError(error);
+  }
+}
+
 export async function fetchOllamaTags(
   base: string,
   fetchImpl: FetchLike = fetch,
+  timeoutMs = 800,
 ): Promise<OllamaTag[]> {
-  const response = await fetchImpl(`${base}/api/tags`, { signal: AbortSignal.timeout(800) });
+  const response = await ollamaFetch(
+    `${base}/api/tags`,
+    { signal: AbortSignal.timeout(timeoutMs) },
+    fetchImpl,
+  );
   if (!response.ok) throw new OctoError("model_unavailable", `ollama ${response.status}`);
   const body = (await response.json()) as { models?: OllamaTag[] };
   return body.models ?? [];

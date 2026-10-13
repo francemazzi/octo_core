@@ -5,6 +5,7 @@ Il payload dei frame è cifrato (AES-256-GCM). Restano in chiaro, perché servon
 - id di sessione, sorgente, evidenza e asset
 - intervalli temporali e stato (`valid`, `partial`, `revoked`)
 - hash del contenuto cifrato
+- `kid` di ogni envelope: le prime 16 cifre esadecimali dello SHA-256 della chiave dei media, per riconoscere una chiave diversa senza rivelarla
 - path del file dentro il data dir
 - esito dei job e testo delle domande già formulate dall'applicazione
 - titolo della sessione, nome e riassunto di ogni attività scritti dal modello: derivano dal testo dello schermo già mascherato e servono alla barra laterale

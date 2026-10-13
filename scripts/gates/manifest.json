@@ -127,6 +127,26 @@
         "apps/desktop/src/main/chat.unit.test.ts"
       ],
       "evidenceRequired": true
+    },
+    "A14": {
+      "track": "automatic",
+      "integration": "tests/integration/A14.readiness.test.ts",
+      "unit": [
+        "apps/engine/src/readiness/requirements.unit.test.ts",
+        "apps/engine/src/readiness/pull.unit.test.ts",
+        "apps/engine/src/capture/ocr-health.unit.test.ts",
+        "apps/engine/src/capture/ocr.unit.test.ts",
+        "apps/engine/src/crypto/key-provider.unit.test.ts",
+        "apps/engine/src/protocol/runtime.unit.test.ts",
+        "apps/engine/src/protocol/serve.unit.test.ts",
+        "apps/desktop/src/main/media-key.unit.test.ts",
+        "apps/desktop/src/main/readiness.unit.test.ts",
+        "apps/desktop/src/main/session-control.unit.test.ts",
+        "apps/desktop/src/main/notes.unit.test.ts",
+        "apps/desktop/src/main/remote-model.unit.test.ts",
+        "apps/desktop/src/renderer/ipc-error.unit.test.ts"
+      ],
+      "evidenceRequired": true
     }
   }
 }

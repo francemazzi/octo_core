@@ -60,7 +60,7 @@ export const EN = {
   "download.reports": "Windows signing reports",
   "download.release": "Release notes on GitHub",
   "download.requirements":
-    "To read the screens Octo needs Ollama and the local OCR model on the same computer.",
+    "To read the screens Octo needs Ollama on the same computer: Octo downloads the models in one click.",
   "faq.title": "FAQ",
   "faq.1.q": "What leaves my computer?",
   "faq.1.a":
@@ -70,7 +70,7 @@ export const EN = {
     "No. Octo has no login and no cloud account. Optional remote analysis uses your own OpenRouter or Anthropic key, stored in the system keystore.",
   "faq.3.q": "What do I need to read the screens?",
   "faq.3.a":
-    "Ollama running on this computer with a local vision model (the OCR model) and a local chat model. Without them Octo still records, but activities are not recognised.",
+    "Ollama running on this computer, the model that reads the screens and a model for the analysis, local or with your own key. Octo checks all of this before recording: if something is missing it says so and downloads the models in one click. You only need to install Ollama.",
   "faq.4.q": "Why does Windows show a warning?",
   "faq.4.a":
     "The Windows packages are signed, but a new signature has no SmartScreen reputation yet. Check the hash against SHA256SUMS.txt, then choose More info → Run anyway.",

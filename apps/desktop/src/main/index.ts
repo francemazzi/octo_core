@@ -1,10 +1,13 @@
 import { join } from "node:path";
-import { app } from "electron";
+import type { CaptureMode } from "@octo/contracts";
+import { app, shell } from "electron";
 import type { UiSource } from "../shared/ui-state.js";
 import { createChatControl } from "./chat.js";
-import { createEngineClient } from "./engine-client.js";
+import { createEngineClient, memoryMediaKey } from "./engine-client.js";
 import { registerIpc } from "./ipc.js";
+import { unlockMediaKey } from "./media-key.js";
 import { parseId } from "./questions.js";
+import { createReadinessControl } from "./readiness.js";
 import { createRemoteModel } from "./remote-model.js";
 import { createScreenCapture, orderedDisplays, screenPermission } from "./screen-capture.js";
 import { keystoreBox } from "./secret-box.js";
@@ -34,12 +37,9 @@ function displaySources(): UiSource[] {
     .map((_display, index) => ({ id: `mon-${index + 1}`, label: `Schermo ${index + 1}` }));
 }
 
-async function modelNote(): Promise<string> {
-  if (process.env.OCTO_MODEL === "off") return "";
-  const reply = await request({ cmd: "model.status" });
-  const status = reply.result as { up?: boolean; model?: string | null };
-  return status.up && status.model ? `Ollama acceso (${status.model}).` : "Ollama spento.";
-}
+/** Real screenshots need OCR on this computer; the synthetic frames of tests do not. */
+const captureMode: CaptureMode =
+  (process.env.OCTO_CAPTURE ?? "screen") === "synthetic" ? "synthetic" : "screen";
 
 app.setName("Octo Core");
 if (process.platform === "win32") app.setAppUserModelId("it.octo.core");
@@ -50,16 +50,29 @@ app.whenReady().then(async () => {
   const capture = createScreenCapture(
     request,
     Number(process.env.OCTO_CAPTURE_INTERVAL_MS ?? 30_000),
-    (message) => control?.reportCaptureError(message),
+    {
+      onError: (message) => control?.reportCaptureError(message),
+      onReply: (result) => control?.captureReply(result),
+    },
   );
+  const readiness = createReadinessControl({
+    request,
+    capture: captureMode,
+    publish: (next) => {
+      session.state.readiness = next;
+      session.publish();
+    },
+    openExternal: (url) => shell.openExternal(url),
+  });
   const session = createSessionControl({
     request,
     capture,
-    synthetic: (process.env.OCTO_CAPTURE ?? "screen") === "synthetic",
-    analyse: process.env.OCTO_MODEL !== "off",
+    synthetic: captureMode === "synthetic",
+    readiness,
     sources: displaySources,
     screenAllowed: () => screenPermission() === "granted",
     publish: (state) => windows.broadcast(state),
+    attention: () => windows.showDashboard(),
   });
   control = session;
   const remote = createRemoteModel({
@@ -69,6 +82,10 @@ app.whenReady().then(async () => {
     publish: (state) => {
       session.state.remote = state;
       session.publish();
+      // A saved key may be the model that was missing: Avvia must not wait for the next poll.
+      readiness.refresh().catch((error: unknown) => {
+        process.stderr.write(`readiness check failed: ${String(error)}\n`);
+      });
     },
   });
   const updater = createUpdater({
@@ -109,6 +126,15 @@ app.whenReady().then(async () => {
     "octo:installUpdate": () => updater.install(),
     "octo:chatSend": (payload) => chat.send(payload),
     "octo:chatHistory": (payload) => chat.history(payload),
+    "octo:pullModel": async (payload) => {
+      await readiness.pull(payload);
+      return session.state;
+    },
+    "octo:installOllama": () => readiness.installOllama(),
+    "octo:checkReadiness": async () => {
+      await readiness.refresh();
+      return session.state;
+    },
   });
 
   const dashboard = windows.createDashboard();
@@ -126,11 +152,19 @@ app.whenReady().then(async () => {
   app.on("activate", () => windows.showDashboard());
 
   await request({ cmd: "handshake", clientVersion: 1 });
+  const keyNote = memoryMediaKey()
+    ? null
+    : await unlockMediaKey(request, join(dataDir, "media-key.bin"), keystoreBox()).catch(
+        (error: unknown) => {
+          process.stderr.write(`media key not unlocked: ${String(error)}\n`);
+          return null;
+        },
+      );
   await remote
     .boot()
     .catch((error: unknown) => process.stderr.write(`remote model not set: ${String(error)}\n`));
-  const note = await modelNote().catch(() => "Ollama spento.");
-  await session.boot(note);
+  await session.boot(keyNote ?? "");
+  readiness.start();
   // Only an installed app looks for updates; `pnpm start` runs the version of the checkout.
   if (app.isPackaged) void updater.check();
 });

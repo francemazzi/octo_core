@@ -16,10 +16,15 @@ export { CHAT_PROMPT_SCHEMA, CHAT_SYSTEM_PROMPT } from "./chat/prompt.js";
 export { ollamaProfile } from "./analysis/ollama.js";
 export { frameTimeline } from "./analysis/model-adapter.js";
 export { createOpenRouterAdapter } from "./analysis/openrouter.js";
-export { analysisProfile, modelWiring } from "./protocol/runtime.js";
+export { analysisProfile, modelWiring, ollamaWiring } from "./protocol/runtime.js";
+export { missingRequirements } from "./readiness/requirements.js";
 export { createEngine } from "./create-engine.js";
 export type { Engine } from "./create-engine.js";
-export { InMemoryKeyProvider, UnavailableKeyProvider } from "./crypto/key-provider.js";
+export {
+  HostKeyProvider,
+  InMemoryKeyProvider,
+  UnavailableKeyProvider,
+} from "./crypto/key-provider.js";
 export { decryptAesGcm } from "./crypto/aes.js";
 export { computeEconomics } from "./domain/economics.js";
 export {

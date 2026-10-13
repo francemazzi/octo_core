@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { analysisProfile, ocrReader, openRouterBase } from "./runtime.js";
+import { HostKeyProvider } from "../crypto/key-provider.js";
+import {
+  analysisProfile,
+  ocrReader,
+  ollamaWiring,
+  openRouterBase,
+  runtimeOptions,
+} from "./runtime.js";
 
 const KEY = { OPENROUTER_API_KEY: "octo-test-key-abcd" };
 
@@ -63,5 +70,18 @@ describe("engine runtime wiring", () => {
     expect(() => analysisProfile({ OCTO_ANTHROPIC_URL: "https://evil.example" })).toThrow();
     expect(() => analysisProfile({ ANTHROPIC_MAX_TOKENS: "0" })).toThrow();
     expect(() => analysisProfile({ OCTO_REMOTE_PROVIDER: "unknown" })).toThrow();
+  });
+
+  it("downloads the light chat model unless one is named, and only from this computer", () => {
+    expect(ollamaWiring({})).toEqual({ base: "http://127.0.0.1:11434", chatModel: "qwen3.5:4b" });
+    expect(ollamaWiring({ OCTO_OLLAMA_MODEL: "llama3.1:8b" })?.chatModel).toBe("llama3.1:8b");
+    expect(ollamaWiring({ OCTO_OLLAMA_URL: "http://10.0.0.5:11434" })).toBeUndefined();
+  });
+
+  it("waits for the desktop's media key only when the desktop keeps it", () => {
+    expect(runtimeOptions({}).keyProvider).toBeUndefined();
+    const host = runtimeOptions({ OCTO_KEY_SOURCE: "host" }).keyProvider;
+    expect(host).toBeInstanceOf(HostKeyProvider);
+    expect(host?.available).toBe(false);
   });
 });

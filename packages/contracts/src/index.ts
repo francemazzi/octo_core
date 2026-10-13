@@ -34,6 +34,27 @@ export {
 export type { ChatCitation, ChatMessage, ChatMode } from "./chat.js";
 
 export {
+  captureImageResultSchema,
+  captureModeSchema,
+  ocrBlockingErrorSchema,
+  ocrHealthSchema,
+  pullRoleSchema,
+  pullStateSchema,
+  readinessRequirementSchema,
+  readinessSchema,
+} from "./readiness.js";
+export type {
+  CaptureImageResult,
+  CaptureMode,
+  OcrBlockingError,
+  OcrHealth,
+  PullRole,
+  PullState,
+  Readiness,
+  ReadinessRequirement,
+} from "./readiness.js";
+
+export {
   MAX_EPISODE_LABEL_CHARS,
   MAX_EPISODE_SUMMARY_CHARS,
   MAX_QUESTION_PROMPT_CHARS,

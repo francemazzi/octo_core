@@ -35,6 +35,7 @@ export function Mascot() {
   const waiting = state.questions.length;
   const target = state.questions[0]?.sessionId ?? state.activeSessionId;
   const busy = state.pending !== null;
+  const ready = state.readiness?.ready === true;
 
   return (
     <div
@@ -57,7 +58,8 @@ export function Mascot() {
             <button
               type="button"
               aria-label="Riprendi"
-              disabled={busy}
+              title={ready ? undefined : "Apri Octo: manca qualcosa per registrare."}
+              disabled={busy || !ready}
               onClick={() => run(() => window.octo.resume())}
             >
               <PlayIcon />
@@ -81,7 +83,10 @@ export function Mascot() {
       >
         <img src="logo_octo.png" alt="" draggable={false} />
         {state.capture !== "idle" ? (
-          <span className={`dot ${state.capture}`} aria-hidden="true" />
+          <span
+            className={`dot ${state.capture}${state.pauseCause ? " warning" : ""}`}
+            aria-hidden="true"
+          />
         ) : null}
         {waiting > 0 ? (
           <span

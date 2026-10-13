@@ -1,6 +1,7 @@
 import type { UiRemote } from "../shared/ui-state.js";
 import type { SessionDetail as Detail, SessionListItem } from "@octo/contracts";
 import { useEffect, useState } from "react";
+import { UNREADABLE_TEXT } from "../shared/readiness-text.js";
 import { ChatPanel } from "./ChatPanel.js";
 import { QuestionsPanel } from "./QuestionsPanel.js";
 import { RemoteAnalysis } from "./RemoteAnalysis.js";
@@ -19,6 +20,11 @@ type Props = {
   /** Another session is being analysed: one analysis at a time. */
   busy: boolean;
   remote: UiRemote;
+  /** The local model that can analyse, or null: then only the remote one is offered. */
+  localModel: string | null;
+  /** Open the remote confirmation at once (after Stop, when no local model exists). */
+  autoConsent: boolean;
+  onConsentSettled: () => void;
 };
 
 /** Refetched whenever the list shows a change for this session (state, activities, questions). */
@@ -33,7 +39,8 @@ function versionOf(item: SessionListItem): string {
   ].join("|");
 }
 
-export function SessionDetail({ item, analyzing, busy, remote }: Props) {
+export function SessionDetail(props: Props) {
+  const { item, analyzing, busy, remote, localModel, autoConsent, onConsentSettled } = props;
   const [detail, setDetail] = useState<Detail | null>(null);
   const { run, error } = useAction();
   const version = versionOf(item);
@@ -57,8 +64,13 @@ export function SessionDetail({ item, analyzing, busy, remote }: Props) {
   const episodes = detail?.session.sessionId === item.sessionId ? detail.episodes : [];
   const questions = detail?.session.sessionId === item.sessionId ? detail.questions : [];
   const canAnalyse =
-    !live && !busy && (item.analysisState === "idle" || item.analysisState === "pending");
+    localModel !== null &&
+    !live &&
+    !busy &&
+    (item.analysisState === "idle" || item.analysisState === "pending");
   const loaded = detail?.session.sessionId === item.sessionId ? detail : null;
+  // A new recipient remounts the confirmations: consent never carries over to another one.
+  const recipient = `${item.sessionId}:${remote.provider}:${remote.model}:${remote.workspaceId}`;
 
   return (
     <article className="detail" aria-label="Dettaglio sessione">
@@ -102,24 +114,27 @@ export function SessionDetail({ item, analyzing, busy, remote }: Props) {
       ) : null}
       {remote.available && !live && !busy && loaded ? (
         <RemoteAnalysis
-          key={`${item.sessionId}:${remote.provider}:${remote.model}:${remote.workspaceId}`}
+          key={`remote:${recipient}`}
           remote={remote}
           sessionId={item.sessionId}
           evidenceCount={loaded.evidenceCount}
+          autoOpen={autoConsent}
+          onSettled={onConsentSettled}
         />
       ) : null}
-      {loaded?.lastRun?.partial ? (
-        <p className="muted">
-          Analisi parziale: la sessione è troppo lunga per essere letta tutta.
-        </p>
+      {loaded?.lastRun?.error === "unreadable_evidence" ? (
+        <p className="muted">{UNREADABLE_TEXT}</p>
+      ) : loaded?.lastRun?.partial ? (
+        <p className="muted">Analisi parziale: il modello non ha letto tutte le schermate.</p>
       ) : null}
       {questions.length > 0 ? <QuestionsPanel questions={questions} /> : null}
       {!live && loaded ? (
         <ChatPanel
-          key={`${item.sessionId}:${remote.provider}:${remote.model}:${remote.workspaceId}`}
+          key={`chat:${recipient}`}
           sessionId={item.sessionId}
           evidenceCount={loaded.evidenceCount}
           remote={remote}
+          localModel={localModel}
           busy={busy || analyzing}
         />
       ) : null}
