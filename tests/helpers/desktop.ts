@@ -16,8 +16,11 @@ export function electronBinary(): string {
  * model, so the list «Prima di registrare» is complete; the media key stays in memory because CI
  * has no system keystore.
  */
-export function launch(dataDir: string, env: NodeJS.ProcessEnv = {}): Promise<ElectronApplication> {
-  return electron.launch({
+export async function launch(
+  dataDir: string,
+  env: NodeJS.ProcessEnv = {},
+): Promise<ElectronApplication> {
+  const app = await electron.launch({
     executablePath: electronBinary(),
     args: [join(process.cwd(), "apps/desktop")],
     env: {
@@ -30,6 +33,9 @@ export function launch(dataDir: string, env: NodeJS.ProcessEnv = {}): Promise<El
       ...env,
     },
   });
+  // A loaded CI runner under xvfb can take more than Playwright's 30 s to show a panel.
+  app.context().setDefaultTimeout(60_000);
+  return app;
 }
 
 export function buildDesktop(): void {
