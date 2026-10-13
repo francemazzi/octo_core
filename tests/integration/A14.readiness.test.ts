@@ -511,7 +511,7 @@ describe("A14 ready before recording", () => {
       let active = page.getByRole("region", { name: "Sessione attiva" });
       await active.getByRole("checkbox", { name: "Schermo 1" }).check();
       if (!secure) {
-        await active.getByText("Archivio sicuro").waitFor();
+        await active.getByText("Archivio sicuro", { exact: true }).waitFor();
         expect(await active.getByRole("button", { name: "Avvia", exact: true }).isDisabled()).toBe(
           true,
         );
