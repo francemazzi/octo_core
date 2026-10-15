@@ -1,4 +1,4 @@
-import { remoteProviderSchema, type RemoteProvider } from "@octo/contracts";
+import { remoteProviderSchema, type RemoteModelConfig, type RemoteProvider } from "@octo/contracts";
 import {
   createAnthropicAdapter,
   verifyAnthropicKey,
@@ -24,6 +24,7 @@ import {
 } from "../analysis/openrouter.js";
 import type { RemoteModels } from "../analysis/remote-slot.js";
 import { createOllamaOcr, DEFAULT_OCR_MODEL, type OcrReader } from "../capture/ocr.js";
+import { screenTranscriber } from "../capture/remote-ocr.js";
 import type { EngineOptions } from "../create-engine.js";
 import { HostKeyProvider } from "../crypto/key-provider.js";
 import { DEFAULT_FRAME_SPAN_MS } from "../domain/frame-timeline.js";
@@ -116,31 +117,44 @@ export function remoteModels(env: NodeJS.ProcessEnv): RemoteModels {
   const anthropicBase = providerBase(env, "OCTO_ANTHROPIC_URL");
   const maxTokens = positiveInt(env, "OPENROUTER_MAX_TOKENS", DEFAULT_OPENROUTER_MAX_TOKENS);
   const anthropicMax = positiveInt(env, "ANTHROPIC_MAX_TOKENS", DEFAULT_ANTHROPIC_MAX_TOKENS);
+  const endpoints = { openRouterBase: baseUrl, anthropicBase };
   const models: RemoteModels = {
     create: (config) =>
       config.provider === "anthropic"
         ? createAnthropicAdapter({ ...config, maxTokens: anthropicMax, baseUrl: anthropicBase })
         : createOpenRouterAdapter({ ...config, maxTokens, baseUrl }),
+    transcribe: (config) => screenTranscriber(config, endpoints),
     verify: (config) =>
       config.provider === "anthropic"
         ? verifyAnthropicKey({ ...config, baseUrl: anthropicBase })
         : verifyOpenRouterKey(config.apiKey, { baseUrl }),
     environment: (provider: RemoteProvider) => {
-      const prefix = provider === "anthropic" ? "ANTHROPIC" : "OPENROUTER";
-      const apiKey = env[`${prefix}_API_KEY`]?.trim();
-      return apiKey
-        ? models.create({
-            provider,
-            apiKey,
-            model: env[`${prefix}_MODEL`]?.trim() || undefined,
-            ...(provider === "anthropic"
-              ? { workspaceId: env.ANTHROPIC_WORKSPACE_ID?.trim() || undefined }
-              : {}),
-          })
-        : undefined;
+      const config = remoteConfig(env, provider);
+      return config ? models.create(config) : undefined;
+    },
+    environmentTranscriber: (provider) => {
+      const config = remoteConfig(env, provider);
+      return config ? screenTranscriber(config, endpoints) : undefined;
     },
   };
   return models;
+}
+
+/** The environment key of one provider. Absent when that provider has no key. */
+function remoteConfig(
+  env: NodeJS.ProcessEnv,
+  provider: RemoteProvider,
+): RemoteModelConfig | undefined {
+  const prefix = provider === "anthropic" ? "ANTHROPIC" : "OPENROUTER";
+  const apiKey = env[`${prefix}_API_KEY`]?.trim();
+  if (!apiKey) return undefined;
+  const workspaceId = env.ANTHROPIC_WORKSPACE_ID?.trim();
+  return {
+    provider,
+    apiKey,
+    model: env[`${prefix}_MODEL`]?.trim() || undefined,
+    ...(provider === "anthropic" && workspaceId ? { workspaceId } : {}),
+  };
 }
 
 /** Test seam: `OCTO_OPENROUTER_URL` may only point to a fake server on this computer. */

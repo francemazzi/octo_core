@@ -51,10 +51,17 @@ export const readinessSchema = z.object({
 });
 export type Readiness = z.infer<typeof readinessSchema>;
 
-/** OCR failures in a row since the last screenshot read; reset by a successful read. */
+/** The provider that transcribed the last screenshot, when glm-ocr could not. */
+const ocrFallbackProviderSchema = z.enum(["openrouter", "anthropic"]);
+
+/**
+ * OCR failures in a row since the last screenshot read; reset by a successful read.
+ * `fallback` is the provider that read the last screenshot, or null when this computer did.
+ */
 export const ocrHealthSchema = z.object({
   consecutiveFailures: z.number().int().nonnegative(),
   lastError: ocrBlockingErrorSchema.nullable(),
+  fallback: ocrFallbackProviderSchema.nullable().default(null),
 });
 export type OcrHealth = z.infer<typeof ocrHealthSchema>;
 

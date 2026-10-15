@@ -1,4 +1,5 @@
 import type { RemoteModelConfig, RemoteModelStatus, RemoteProvider } from "@octo/contracts";
+import type { ScreenTranscriber } from "../capture/remote-ocr.js";
 import { OctoError } from "../errors.js";
 import type { AnalysisProfile, ModelAdapter } from "./model-adapter.js";
 
@@ -6,6 +7,10 @@ import type { AnalysisProfile, ModelAdapter } from "./model-adapter.js";
 export type RemoteModels = {
   create(config: RemoteModelConfig): ModelAdapter;
   environment?(provider: RemoteProvider): ModelAdapter | undefined;
+  /** Screenshot transcription for a key the operator saves. One provider, no cross fallback. */
+  transcribe?(config: RemoteModelConfig): ScreenTranscriber;
+  /** The environment key of one provider, read when a settings key is removed. */
+  environmentTranscriber?(provider: RemoteProvider): ScreenTranscriber | undefined;
   /** Asks the provider whether the key works; sends no evidence. */
   verify(config: RemoteModelConfig): Promise<void>;
 };
@@ -29,6 +34,12 @@ export function createRemoteSlot(deps: {
 }) {
   const atStart = deps.profile.models.remote;
   let source: "settings" | "env" = "env";
+  let screen = transcriberFor(atStart?.provider);
+
+  function transcriberFor(provider: string | undefined): ScreenTranscriber | undefined {
+    if (provider !== "openrouter" && provider !== "anthropic") return undefined;
+    return deps.models?.environmentTranscriber?.(provider);
+  }
 
   async function status(): Promise<RemoteModelStatus> {
     const adapter = deps.profile.models.remote;
@@ -44,6 +55,10 @@ export function createRemoteSlot(deps: {
 
   return {
     status,
+    /** The provider that may read a screenshot glm-ocr could not, as configured right now. */
+    transcriber(): ScreenTranscriber | undefined {
+      return screen;
+    },
     async configure(input: {
       remote: RemoteModelConfig | null;
       verify: boolean;
@@ -58,6 +73,7 @@ export function createRemoteSlot(deps: {
           : atStart;
         if (restored) deps.profile.models.remote = restored;
         else delete deps.profile.models.remote;
+        screen = transcriberFor(restored?.provider);
         deps.audit({ provider: null });
         return status();
       }
@@ -68,6 +84,7 @@ export function createRemoteSlot(deps: {
       if (input.verifyOnly) return status();
       const adapter = deps.models.create(input.remote);
       deps.profile.models.remote = adapter;
+      screen = deps.models.transcribe?.(input.remote);
       source = "settings";
       const current = await status();
       deps.audit({

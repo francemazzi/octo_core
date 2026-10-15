@@ -29,6 +29,53 @@ type CompletionBody = {
 };
 
 /**
+ * One screenshot, as plain text, from providers that neither store nor train on it.
+ * Not the episode prompt: no JSON mode, so a transcript is not rejected as the wrong shape.
+ */
+export async function transcribeOpenRouterImage(
+  options: OpenRouterOptions,
+  imageBase64: string,
+): Promise<string> {
+  if (options.apiKey.length === 0) {
+    throw new OctoError("model_unavailable", "OPENROUTER_API_KEY is missing");
+  }
+  const model = options.model ?? DEFAULT_OPENROUTER_MODEL;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const body = await transient(async () => {
+    const response = await fetchImpl(`${options.baseUrl ?? OPENROUTER_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${options.apiKey}`,
+        "content-type": "application/json",
+        "x-title": "Octo Core",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: options.maxTokens ?? 1_024,
+        temperature: 0,
+        provider: { data_collection: "deny", zdr: true, require_parameters: true },
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Text Recognition:" },
+              { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageBase64}` } },
+            ],
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(MODEL_CALL_TIMEOUT_MS),
+    });
+    if (response.status === 429 || response.status >= 500) {
+      throw new OctoError("remote_unreachable", `openrouter ${response.status}`);
+    }
+    if (!response.ok) throw new Error(`openrouter ${response.status}`);
+    return (await response.json()) as CompletionBody;
+  });
+  return body.choices?.[0]?.message?.content ?? "";
+}
+
+/**
  * Remote model for the cloud modes. The graph only hands it the evidence perimeter of the mode,
  * and routing is limited to providers that neither store nor train on the data.
  */

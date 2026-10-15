@@ -105,6 +105,24 @@ describe("recording control", () => {
     expect(world.capturing).toBe(true);
   });
 
+  it("names the provider that read the last screenshot, and a local read clears it", async () => {
+    const { control } = setup();
+    await control.start(["mon-1"]);
+    control.captureReply({
+      accepted: true,
+      reason: "queued",
+      ocr: { consecutiveFailures: 0, lastError: null, fallback: "anthropic" },
+    });
+    expect(control.state.ocrFallback).toBe("anthropic");
+    expect(control.state.capture).toBe("recording");
+    control.captureReply({
+      accepted: true,
+      reason: "queued",
+      ocr: { consecutiveFailures: 0, lastError: null, fallback: null },
+    });
+    expect(control.state.ocrFallback).toBeNull();
+  });
+
   it("after Stop analyses locally, or opens the remote consent, or says no model can", async () => {
     const local = setup();
     await local.control.start(["mon-1"]);

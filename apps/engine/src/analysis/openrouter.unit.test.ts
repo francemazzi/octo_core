@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createOpenRouterAdapter, OPENROUTER_BASE_URL } from "./openrouter.js";
+import {
+  createOpenRouterAdapter,
+  OPENROUTER_BASE_URL,
+  transcribeOpenRouterImage,
+} from "./openrouter.js";
 
 type Captured = { url: string; headers: Record<string, string>; body: Record<string, unknown> };
 
@@ -123,5 +127,28 @@ describe("OpenRouter conversation", () => {
       content: '{"answer":"Un ordine."}',
       usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
     });
+  });
+
+  it("transcribes one screenshot without JSON mode, from providers that keep no data", async () => {
+    const captured: Captured[] = [];
+    const text = await transcribeOpenRouterImage(
+      {
+        apiKey: "test-key",
+        model: "vendor/vision",
+        fetchImpl: stub({ choices: [{ message: { content: "Ordine Rossi" } }] }, captured),
+      },
+      "aW1n",
+    );
+    expect(text).toBe("Ordine Rossi");
+    expect(captured[0]?.body.response_format).toBeUndefined();
+    expect(captured[0]?.body.provider).toEqual({
+      data_collection: "deny",
+      zdr: true,
+      require_parameters: true,
+    });
+    const messages = JSON.stringify(captured[0]?.body.messages);
+    expect(messages).toContain("Text Recognition:");
+    expect(messages).toContain("data:image/jpeg;base64,aW1n");
+    expect(JSON.stringify(captured[0]?.headers)).not.toContain("aW1n");
   });
 });

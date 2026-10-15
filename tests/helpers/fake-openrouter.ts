@@ -31,9 +31,29 @@ export async function fakeOpenRouter() {
         response.end(JSON.stringify({ data: { label: "test" } }));
         return;
       }
-      const messages = (JSON.parse(body) as { messages?: Array<{ role: string; content: string }> })
-        .messages;
-      const prompt = messages?.find((message) => message.role === "user")?.content ?? "";
+      const messages = (
+        JSON.parse(body) as { messages?: Array<{ role: string; content?: unknown }> }
+      ).messages;
+      const content = messages?.find((message) => message.role === "user")?.content;
+      if (Array.isArray(content)) {
+        const text = "Ordine 1001";
+        if (path.endsWith("/messages")) {
+          response.end(
+            JSON.stringify({
+              model: "claude-test",
+              stop_reason: "end_turn",
+              content: [{ type: "text", text }],
+              usage: { input_tokens: 10, output_tokens: 5 },
+            }),
+          );
+          return;
+        }
+        response.end(
+          JSON.stringify({ model: "fake/model", choices: [{ message: { content: text } }] }),
+        );
+        return;
+      }
+      const prompt = typeof content === "string" ? content : "";
       const reply = {
         title: "Sessione di prova",
         episodes: [

@@ -77,6 +77,8 @@ export type UiState = {
   readiness: Readiness | null;
   /** Set when Octo paused the recording because reading the screenshots stopped working. */
   pauseCause: PauseCause | null;
+  /** Provider that read the last screenshot, when glm-ocr could not. Null while reading stays local. */
+  ocrFallback: RemoteProvider | null;
   /**
    * Set when the dashboard should show a session (mascot click, new session, new question);
    * `consent` opens the confirmation for the remote model right away (after Stop, no local model).
@@ -110,6 +112,7 @@ export const initialUiState: UiState = {
   update: { status: "none", version: null, progress: null, message: null },
   readiness: null,
   pauseCause: null,
+  ocrFallback: null,
   focus: null,
 };
 

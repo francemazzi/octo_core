@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PAUSE_TEXT } from "../shared/readiness-text.js";
+import { ocrFallbackText, PAUSE_TEXT } from "../shared/readiness-text.js";
 import type { UiState } from "../shared/ui-state.js";
 import { ReadinessChecklist } from "./ReadinessChecklist.js";
 import { formatClock } from "./session-format.js";
@@ -75,6 +75,9 @@ export function ActiveSession({ state, onSettings }: Props) {
             <p className="pause-cause" role="alert">
               {PAUSE_TEXT[state.pauseCause]}
             </p>
+          ) : null}
+          {state.capture === "recording" && state.ocrFallback ? (
+            <p className="muted">{ocrFallbackText(state.ocrFallback)}</p>
           ) : null}
           {state.capture === "paused" && !ready ? (
             <ReadinessChecklist readiness={state.readiness} onSettings={onSettings} />

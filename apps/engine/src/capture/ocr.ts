@@ -9,17 +9,25 @@ import {
   sameOllamaModel,
   type OllamaTag,
 } from "../analysis/ollama.js";
+import type { RemoteProvider } from "@octo/contracts";
 import { OctoError } from "../errors.js";
 
 export const DEFAULT_OCR_MODEL = "glm-ocr";
+/** The only instruction sent with a screenshot: transcribe, do not interpret. */
+export const OCR_PROMPT = "Text Recognition:";
 const MAX_OCR_CHARS = 4_000;
 
 type FetchLike = typeof fetch;
 
-/** Turns a screenshot into text on this computer; the image itself is never stored. */
+/** Turns a screenshot into text; the image itself is never stored. */
 export interface OcrReader {
   readonly model: string;
-  read(imageBase64: string): Promise<string>;
+  /**
+   * Provider that transcribed the last successful read, or null when this computer did.
+   * Absent on a reader that never leaves the machine.
+   */
+  lastVia?: RemoteProvider | null;
+  read(imageBase64: string, frameId?: string): Promise<string>;
 }
 
 /** glm-ocr repeats its transcript inside code fences: keep the first copy only. */
@@ -101,7 +109,7 @@ export function createOllamaOcr(
               model,
               stream: true,
               options: { num_ctx: 8_192, num_predict: 1_024, temperature: 0, stop: ["```"] },
-              messages: [{ role: "user", content: "Text Recognition:", images: [imageBase64] }],
+              messages: [{ role: "user", content: OCR_PROMPT, images: [imageBase64] }],
             }),
             signal: AbortSignal.timeout(60_000),
           },

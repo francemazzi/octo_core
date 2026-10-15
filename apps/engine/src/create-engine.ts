@@ -9,6 +9,7 @@ import {
 } from "@octo/capture-adapter";
 import { loadSessionOracle } from "@octo/test-fixtures";
 import type { CaptureMode, EconomicsInput, PullRole } from "@octo/contracts";
+import { createFallbackOcr } from "./capture/ocr-fallback.js";
 import { createImageQueue, type ImageFrame } from "./capture/image-queue.js";
 import { ingestFrame, nextSequence } from "./capture/ingest.js";
 import type { OcrReader } from "./capture/ocr.js";
@@ -79,8 +80,11 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
   const nowWall = options.nowWall ?? (() => wall);
   const quotaThreshold = options.quotaThresholdBytes ?? 1_000_000;
   const ocrMonitor = createOcrMonitor({ db, nowWall, sessionId: () => active()?.id ?? null });
+  const reading: { ocr: OcrReader | undefined } = { ocr: options.ocr };
   const images = createImageQueue({
-    ocr: options.ocr,
+    get ocr() {
+      return reading.ocr;
+    },
     accept: (sourceId) => {
       const session = active();
       if (session?.capture_state !== "recording") return { rejected: "not_recording" };
@@ -99,7 +103,7 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
         });
     },
     onFailure: (frameId, error) => ocrMonitor.failed(frameId, error),
-    onRead: () => ocrMonitor.reset(),
+    onRead: (via) => ocrMonitor.reset(via),
     onSkipped: (frameId, waiting) =>
       recordAudit(db, {
         sessionId: active()?.id ?? null,
@@ -115,6 +119,19 @@ export function createEngine(dataDir: string, options: EngineOptions = {}) {
     audit: (detail) =>
       recordAudit(db, { sessionId: null, at: nowWall(), action: "model_configured", detail }),
   });
+  if (options.ocr) {
+    reading.ocr = createFallbackOcr({
+      local: options.ocr,
+      current: () => remote.transcriber(),
+      audit: (frameId, provider) =>
+        recordAudit(db, {
+          sessionId: active()?.id ?? null,
+          at: nowWall(),
+          action: "network",
+          detail: { frameId, provider, purpose: "ocr" },
+        }),
+    });
+  }
 
   const readText = (assetId: string) => media.readPlaintext(assetId).toString("utf8");
   const analysis = createAnalysisService({

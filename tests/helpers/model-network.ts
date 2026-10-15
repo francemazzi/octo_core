@@ -42,14 +42,31 @@ export function fakeModelNetwork(models: FakeModels = {}): {
     }
     const parsed = JSON.parse(body) as {
       model?: string;
-      messages?: Array<{ role: string; content: string; images?: string[] }>;
+      messages?: Array<{ role: string; content?: unknown; images?: string[] }>;
     };
     const user = parsed.messages?.find((message) => message.role === "user");
-    if (user?.images) {
-      return new Response(JSON.stringify({ message: { content: models.ocrText ?? "" } }));
+    if (user?.images || hasImage(user?.content)) {
+      const text = models.ocrText ?? "";
+      if (url.endsWith("/messages")) {
+        return Response.json({
+          model: parsed.model,
+          stop_reason: "end_turn",
+          content: [{ type: "text", text }],
+          usage: { input_tokens: 10, output_tokens: 5 },
+        });
+      }
+      if (url.endsWith("/api/chat")) {
+        return new Response(JSON.stringify({ message: { content: text } }));
+      }
+      return Response.json({
+        model: parsed.model,
+        choices: [{ message: { content: text } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15, cost: 0 },
+      });
     }
-    prompts.push(user?.content ?? "");
-    const content = JSON.stringify(models.reply?.(user?.content ?? "", prompts.length) ?? {});
+    const prompt = typeof user?.content === "string" ? user.content : "";
+    prompts.push(prompt);
+    const content = JSON.stringify(models.reply?.(prompt, prompts.length) ?? {});
     if (url.endsWith("/api/chat")) return Response.json({ message: { content } });
     if (url.endsWith("/messages"))
       return Response.json({
@@ -65,6 +82,19 @@ export function fakeModelNetwork(models: FakeModels = {}): {
     });
   }) as typeof fetch;
   return { fetch: fakeFetch, calls, prompts };
+}
+
+function hasImage(content: unknown): boolean {
+  return (
+    Array.isArray(content) &&
+    content.some(
+      (block) =>
+        typeof block === "object" &&
+        block !== null &&
+        "type" in block &&
+        (block.type === "image" || block.type === "image_url"),
+    )
+  );
 }
 
 /** The evidence aliases (`e1`, `e2`, …) of a prompt, in order. */

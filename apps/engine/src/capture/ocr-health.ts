@@ -1,4 +1,4 @@
-import { ocrBlockingErrorSchema, type OcrHealth } from "@octo/contracts";
+import { ocrBlockingErrorSchema, type OcrHealth, type RemoteProvider } from "@octo/contracts";
 import { OctoError } from "../errors.js";
 import { recordAudit } from "../storage/audit.js";
 import type { Sql } from "../storage/db.js";
@@ -13,7 +13,7 @@ export function createOcrMonitor(deps: {
   nowWall: () => string;
   sessionId: () => string | null;
 }) {
-  let health: OcrHealth = { consecutiveFailures: 0, lastError: null };
+  let health: OcrHealth = { consecutiveFailures: 0, lastError: null, fallback: null };
 
   return {
     failed(frameId: string, error: unknown): void {
@@ -30,10 +30,15 @@ export function createOcrMonitor(deps: {
       });
       const blocking = ocrBlockingErrorSchema.safeParse(code);
       if (!blocking.success) return;
-      health = { consecutiveFailures: health.consecutiveFailures + 1, lastError: blocking.data };
+      health = {
+        consecutiveFailures: health.consecutiveFailures + 1,
+        lastError: blocking.data,
+        fallback: health.fallback,
+      };
     },
-    reset(): void {
-      health = { consecutiveFailures: 0, lastError: null };
+    /** A successful read. `via` is set when the configured provider transcribed the screenshot. */
+    reset(via: RemoteProvider | null = null): void {
+      health = { consecutiveFailures: 0, lastError: null, fallback: via };
     },
     health(): OcrHealth {
       return health;

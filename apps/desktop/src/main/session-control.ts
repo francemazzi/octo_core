@@ -1,4 +1,4 @@
-import { remoteAnalysisInputSchema } from "@octo/contracts";
+import { captureImageResultSchema, remoteAnalysisInputSchema } from "@octo/contracts";
 import { providerLabel } from "../shared/ui-state.js";
 import { ANALYSIS_TIMEOUT_MS, type SessionDetail } from "@octo/contracts";
 import { initialUiState, type Pending, type UiSource, type UiState } from "../shared/ui-state.js";
@@ -175,6 +175,7 @@ export function createSessionControl(deps: ControlDeps) {
         });
         const started = reply.result as { sessionId: string; startedWall: string };
         state.capture = "recording";
+        state.ocrFallback = null;
         state.activeSessionId = started.sessionId;
         state.startedWall = started.startedWall;
         state.focus = { sessionId: started.sessionId, at: Date.now() };
@@ -214,6 +215,7 @@ export function createSessionControl(deps: ControlDeps) {
         state.activeSessionId = null;
         state.startedWall = null;
         state.pauseCause = null;
+        state.ocrFallback = null;
         await settled;
         if (sessionId) afterStop(sessionId);
       }),
@@ -261,6 +263,14 @@ export function createSessionControl(deps: ControlDeps) {
      * Not awaited: the pause waits for the very screenshot tick that delivered this reply.
      */
     captureReply(payload: unknown): void {
+      const parsed = captureImageResultSchema.safeParse(payload);
+      if (parsed.success && state.capture === "recording") {
+        const next = parsed.data.ocr.fallback;
+        if (next !== state.ocrFallback) {
+          state.ocrFallback = next;
+          publish();
+        }
+      }
       const cause = pauseCauseFor(payload);
       if (!cause || state.capture !== "recording" || state.pending || state.pauseCause) return;
       state.pauseCause = cause;
@@ -277,6 +287,7 @@ export function createSessionControl(deps: ControlDeps) {
       await deps.capture.stop();
       await deps.request({ cmd: "session.stop" });
       state.capture = "idle";
+      state.ocrFallback = null;
     },
   };
 }

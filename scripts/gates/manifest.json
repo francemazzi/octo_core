@@ -136,6 +136,7 @@
         "apps/engine/src/readiness/pull.unit.test.ts",
         "apps/engine/src/capture/ocr-health.unit.test.ts",
         "apps/engine/src/capture/ocr.unit.test.ts",
+        "apps/engine/src/capture/ocr-fallback.unit.test.ts",
         "apps/engine/src/crypto/key-provider.unit.test.ts",
         "apps/engine/src/protocol/runtime.unit.test.ts",
         "apps/engine/src/protocol/serve.unit.test.ts",

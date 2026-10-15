@@ -29,9 +29,17 @@ describe("OCR health", () => {
     const { ocr, audits } = monitor();
     ocr.failed("f1", new OctoError("ollama_unreachable", "down"));
     ocr.failed("f2", new OctoError("ollama_unreachable", "down"));
-    expect(ocr.health()).toEqual({ consecutiveFailures: 2, lastError: "ollama_unreachable" });
+    expect(ocr.health()).toEqual({
+      consecutiveFailures: 2,
+      lastError: "ollama_unreachable",
+      fallback: null,
+    });
     ocr.failed("f3", new OctoError("ollama_timeout", "slow"));
-    expect(ocr.health()).toEqual({ consecutiveFailures: 3, lastError: "ollama_timeout" });
+    expect(ocr.health()).toEqual({
+      consecutiveFailures: 3,
+      lastError: "ollama_timeout",
+      fallback: null,
+    });
     expect(audits().map((detail) => detail.error)).toEqual([
       "ollama_unreachable",
       "ollama_unreachable",
@@ -44,9 +52,21 @@ describe("OCR health", () => {
     ocr.failed("f1", new OctoError("ocr_model_missing", "glm-ocr is not installed"));
     ocr.failed("f2", new OctoError("ocr_failed", "token repeat limit reached"));
     ocr.failed("f3", new Error("disk"));
-    expect(ocr.health()).toEqual({ consecutiveFailures: 1, lastError: "ocr_model_missing" });
+    expect(ocr.health()).toEqual({
+      consecutiveFailures: 1,
+      lastError: "ocr_model_missing",
+      fallback: null,
+    });
     expect(audits().at(-1)).toEqual({ frameId: "f3", error: "internal", message: "disk" });
+    ocr.reset("openrouter");
+    expect(ocr.health()).toEqual({
+      consecutiveFailures: 0,
+      lastError: null,
+      fallback: "openrouter",
+    });
+    ocr.failed("f4", new OctoError("ollama_timeout", "slow"));
+    expect(ocr.health().fallback).toBe("openrouter");
     ocr.reset();
-    expect(ocr.health()).toEqual({ consecutiveFailures: 0, lastError: null });
+    expect(ocr.health()).toEqual({ consecutiveFailures: 0, lastError: null, fallback: null });
   });
 });

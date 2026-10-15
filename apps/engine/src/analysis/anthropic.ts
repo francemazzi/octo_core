@@ -105,6 +105,38 @@ async function complete(
   };
 }
 
+/** One screenshot, transcribed and discarded. No tools, no episode prompt, no stored image. */
+export async function transcribeAnthropicImage(
+  options: AnthropicOptions,
+  imageBase64: string,
+): Promise<string> {
+  const model = options.model ?? DEFAULT_ANTHROPIC_MODEL;
+  const response = await request(options, "/messages", {
+    model,
+    max_tokens: options.maxTokens ?? 1_024,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/jpeg", data: imageBase64 },
+          },
+          { type: "text", text: "Text Recognition:" },
+        ],
+      },
+    ],
+  });
+  const parsed = messageSchema.safeParse(await response.json().catch(() => null));
+  if (!parsed.success || parsed.data.stop_reason !== "end_turn") {
+    throw new OctoError("invalid_model_output", "Anthropic returned an incomplete transcript");
+  }
+  return parsed.data.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text ?? "")
+    .join("\n");
+}
+
 export function createAnthropicAdapter(options: AnthropicOptions): ModelAdapter {
   const model = options.model ?? DEFAULT_ANTHROPIC_MODEL;
   return {

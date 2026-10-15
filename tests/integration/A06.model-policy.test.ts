@@ -108,6 +108,68 @@ describe("A06 model policy on the production wiring", () => {
     },
   );
 
+  it.each(["openrouter", "anthropic"] as const)(
+    "transcribes one slow screenshot with %s and not the other provider",
+    async (provider) => {
+      const network = fakeModelNetwork({ ocrText: "Ordine Rossi" });
+      vi.stubGlobal("fetch", network.fetch);
+      const engine = createEngine(mkdtempSync(join(tmpdir(), "octo-a06-ocr-")), {
+        ...modelWiring({
+          OPENROUTER_API_KEY: KEY,
+          ANTHROPIC_API_KEY: KEY,
+          OCTO_REMOTE_PROVIDER: provider,
+          OCTO_OPENROUTER_URL: FAKE_OPENROUTER,
+          OCTO_ANTHROPIC_URL: "http://127.0.0.1:4011/v1",
+          OCTO_MODEL: "off",
+        }),
+        ocr: {
+          model: "glm-ocr",
+          read: () => Promise.reject(new OctoError("ollama_timeout", "Ollama did not answer")),
+        },
+      });
+      try {
+        startDemo(engine);
+        engine.captureImage({
+          frameId: "img",
+          sourceId: "mon-1",
+          offsetMs: 0,
+          imageBase64: "aW1n",
+        });
+        await engine.drainCapture();
+        const remote = network.calls.filter((call) => !call.url.startsWith(`${LOCAL}/`));
+        expect(remote.map((call) => call.url)).toEqual([
+          provider === "anthropic"
+            ? "http://127.0.0.1:4011/v1/messages"
+            : `${FAKE_OPENROUTER}/chat/completions`,
+        ]);
+        const body = JSON.parse(remote[0]?.body ?? "{}") as {
+          provider?: { data_collection: string; zdr: boolean; require_parameters: boolean };
+          messages?: unknown;
+        };
+        if (provider === "openrouter") {
+          expect(body.provider).toEqual({
+            data_collection: "deny",
+            zdr: true,
+            require_parameters: true,
+          });
+        }
+        expect(JSON.stringify(body.messages)).toContain("Text Recognition:");
+        const audits = (engine.networkAudits() as Array<{ detail_json: string }>).map((row) =>
+          JSON.parse(row.detail_json),
+        );
+        expect(audits).toEqual([{ frameId: "img", provider, purpose: "ocr" }]);
+        const stored = JSON.stringify(engine.db.prepare("SELECT * FROM audit_events").all());
+        expect(stored).not.toContain(KEY);
+        expect(stored).not.toContain("aW1n");
+        expect(engine.ocrHealth()).toMatchObject({ consecutiveFailures: 0, fallback: provider });
+        const row = engine.listEvidence()[0] as { asset_id: string };
+        expect(engine.media.readPlaintext(row.asset_id).toString("utf8")).toContain("Ordine Rossi");
+      } finally {
+        engine.close();
+      }
+    },
+  );
+
   it("sends nothing when the only models run in the cloud or Ollama is on another host", async () => {
     const cloudOnly = wiredEngine(
       {},

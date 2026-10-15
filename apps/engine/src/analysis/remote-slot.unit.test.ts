@@ -75,4 +75,27 @@ describe("remote model slot", () => {
       without.configure({ remote: { provider: "openrouter", apiKey: KEY }, verify: false }),
     ).rejects.toMatchObject({ code: "remote_unavailable" });
   });
+
+  it("reads screenshots with the key just saved, then with the environment key again", async () => {
+    const profile: AnalysisProfile = {
+      models: { remote: createOpenRouterAdapter({ apiKey: "env-key-abcdefghij" }) },
+      timeline: frameTimeline(1),
+    };
+    const slot = createRemoteSlot({
+      profile,
+      models: {
+        ...models([]),
+        environmentTranscriber: () => ({ provider: "openrouter", transcribe: async () => "env" }),
+        transcribe: (config) => ({ provider: config.provider, transcribe: async () => "saved" }),
+      },
+      audit: () => undefined,
+    });
+    expect(slot.transcriber()?.provider).toBe("openrouter");
+    await slot.configure({ remote: { provider: "anthropic", apiKey: KEY }, verify: false });
+    expect(slot.transcriber()?.provider).toBe("anthropic");
+    await expect(slot.transcriber()?.transcribe("aW1n")).resolves.toBe("saved");
+    await slot.configure({ remote: null, verify: false });
+    expect(slot.transcriber()?.provider).toBe("openrouter");
+    await expect(slot.transcriber()?.transcribe("aW1n")).resolves.toBe("env");
+  });
 });

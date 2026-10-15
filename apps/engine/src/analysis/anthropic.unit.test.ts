@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAnthropicAdapter, verifyAnthropicKey } from "./anthropic.js";
+import {
+  createAnthropicAdapter,
+  transcribeAnthropicImage,
+  verifyAnthropicKey,
+} from "./anthropic.js";
 
 const evidence = [{ id: "ev-1", sourceId: "mon-1", startMs: 0, text: "synthetic order" }];
 const KEY = "octo-anthropic-test-key";
@@ -126,5 +130,31 @@ describe("Anthropic conversation", () => {
       content: '{"answer":"Sì."}',
       usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
     });
+  });
+
+  it("transcribes one screenshot as an image block and returns only the text", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        model: "claude-test",
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: "Ordine Rossi" }],
+        usage: { input_tokens: 20, output_tokens: 10 },
+      }),
+    );
+    const text = await transcribeAnthropicImage(
+      { apiKey: KEY, fetchImpl, model: "claude-test", workspaceId: "wrkspc_test", maxTokens: 1024 },
+      "aW1n",
+    );
+    expect(text).toBe("Ordine Rossi");
+    const init = fetchImpl.mock.calls[0]?.[1];
+    expect(new Headers(init?.headers).get("anthropic-workspace-id")).toBe("wrkspc_test");
+    const body = JSON.parse(String(init?.body));
+    expect(body.system).toBeUndefined();
+    expect(body.tools).toBeUndefined();
+    expect(body.max_tokens).toBe(1024);
+    expect(body.messages[0].content).toEqual([
+      { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "aW1n" } },
+      { type: "text", text: "Text Recognition:" },
+    ]);
   });
 });

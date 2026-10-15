@@ -205,6 +205,7 @@ describe("A14 ready before recording", () => {
       expect(engine.ocrHealth()).toEqual({
         consecutiveFailures: 2,
         lastError: "ollama_unreachable",
+        fallback: null,
       });
       expect(control.state.capture).toBe("recording");
       await screenshot();
@@ -224,7 +225,11 @@ describe("A14 ready before recording", () => {
       fake.state.down = false;
       await control.resume();
       expect(control.state).toMatchObject({ capture: "recording", pauseCause: null, error: null });
-      expect(engine.ocrHealth()).toEqual({ consecutiveFailures: 0, lastError: null });
+      expect(engine.ocrHealth()).toEqual({
+        consecutiveFailures: 0,
+        lastError: null,
+        fallback: null,
+      });
       await control.stop();
     } finally {
       engine.close();
@@ -262,6 +267,103 @@ describe("A14 ready before recording", () => {
       expect(replies.at(-1)).toMatchObject({
         ocr: { consecutiveFailures: 3, lastError: "ollama_timeout" },
       });
+    } finally {
+      engine.close();
+    }
+  });
+
+  it("reads a slow screenshot with the saved key and keeps recording", async () => {
+    const daemon = await ollama({ tags: [{ name: "glm-ocr:latest" }] });
+    const openrouter = await fakeOpenRouter();
+    open.push(openrouter);
+    const key = "octo-test-key-abcd";
+    const engine = createEngine(mkdtempSync(join(tmpdir(), "octo-a14-fallback-")), {
+      ...modelWiring({
+        ...NO_REMOTE,
+        OCTO_MODEL: "fixture",
+        OCTO_OLLAMA_URL: daemon.url,
+        OCTO_OPENROUTER_URL: openrouter.url,
+      }),
+      ocr: {
+        model: "glm-ocr",
+        read: () => Promise.reject(new OctoError("ollama_timeout", "Ollama did not answer")),
+      },
+    });
+    const request = engineRequest(engine);
+    const control = createSessionControl({
+      request,
+      capture: { start: () => undefined, stop: async () => undefined },
+      synthetic: false,
+      readiness: createReadinessControl({
+        request,
+        capture: "screen",
+        publish: (next) => {
+          control.state.readiness = next;
+        },
+        openExternal: async () => undefined,
+      }),
+      sources: () => [{ id: "mon-1", label: "Schermo 1" }],
+      screenAllowed: () => true,
+      publish: () => undefined,
+      attention: () => undefined,
+    });
+    let frame = 0;
+    async function screenshot(): Promise<void> {
+      frame += 1;
+      const reply = await request({
+        cmd: "capture.image",
+        frameId: `slow-${frame}`,
+        sourceId: "mon-1",
+        offsetMs: frame * 30_000,
+        imageBase64: "aW1n",
+      });
+      control.captureReply(reply.result);
+      await engine.drainCapture();
+    }
+    try {
+      await control.start(["mon-1"]);
+      expect(control.state).toMatchObject({ capture: "recording", error: null });
+      await screenshot();
+      expect(openrouter.received.some((call) => call.path.endsWith("/chat/completions"))).toBe(
+        false,
+      );
+      expect(engine.ocrHealth()).toMatchObject({
+        consecutiveFailures: 1,
+        lastError: "ollama_timeout",
+      });
+      expect(engine.listEvidence()).toHaveLength(0);
+
+      await engine.configureRemoteModel({
+        remote: { provider: "openrouter", apiKey: key },
+        verify: true,
+      });
+      await screenshot();
+      await screenshot();
+      await screenshot();
+      expect(control.state).toMatchObject({ capture: "recording", pauseCause: null });
+      expect(engine.ocrHealth()).toEqual({
+        consecutiveFailures: 0,
+        lastError: null,
+        fallback: "openrouter",
+      });
+      const chats = openrouter.received.filter((call) => call.path.endsWith("/chat/completions"));
+      expect(chats).toHaveLength(3);
+      expect(JSON.parse(chats[0]?.body ?? "{}").provider).toEqual({
+        data_collection: "deny",
+        zdr: true,
+        require_parameters: true,
+      });
+      expect(audits(engine, "network")).toEqual([
+        { frameId: "slow-2", provider: "openrouter", purpose: "ocr" },
+        { frameId: "slow-3", provider: "openrouter", purpose: "ocr" },
+        { frameId: "slow-4", provider: "openrouter", purpose: "ocr" },
+      ]);
+      const stored = JSON.stringify(engine.db.prepare("SELECT * FROM audit_events").all());
+      expect(stored).not.toContain(key);
+      expect(stored).not.toContain("aW1n");
+      const row = engine.listEvidence()[0] as { asset_id: string };
+      expect(engine.media.readPlaintext(row.asset_id).toString("utf8")).toContain("Ordine 1001");
+      await control.stop();
     } finally {
       engine.close();
     }

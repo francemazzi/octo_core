@@ -1,4 +1,4 @@
-import type { PullState, ReadinessRequirement } from "@octo/contracts";
+import type { PullState, ReadinessRequirement, RemoteProvider } from "@octo/contracts";
 
 /** Why Octo paused a recording on its own: reading the screenshots stopped working. */
 export type PauseCause = "ollama" | "ocr_model" | "remote_model" | "ocr_slow" | "ocr_unavailable";
@@ -27,6 +27,12 @@ export const PULL_ERROR_TEXT: Record<NonNullable<PullState["error"]>, string> = 
   pull_failed: "Download non riuscito: controlla la connessione e lo spazio su disco, poi riprova.",
   pull_stalled: "Download fermo da troppo tempo: riprova.",
 };
+
+/** Shown while recording, after glm-ocr failed and the configured provider read the screenshot. */
+export function ocrFallbackText(provider: RemoteProvider): string {
+  const name = provider === "anthropic" ? "Claude" : "OpenRouter";
+  return `Lettura passata a ${name}: il provider non conserva i dati.`;
+}
 
 /** One sentence for Avvia or Riprendi refused: everything the list still misses. */
 export function readinessProblem(missing: readonly ReadinessRequirement[]): string {
