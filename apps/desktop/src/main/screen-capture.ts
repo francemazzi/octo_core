@@ -47,6 +47,8 @@ export function createScreenCapture(
   let running: Promise<void> | undefined;
   let selected: string[] = [];
   let startedAt = 0;
+  /** One notice per recording while every tick comes back without an image. */
+  let reportedMiss = false;
 
   async function tick(): Promise<void> {
     const sources = await desktopCapturer.getSources({
@@ -54,12 +56,14 @@ export function createScreenCapture(
       thumbnailSize: { width: MAX_IMAGE_SIDE, height: MAX_IMAGE_SIDE },
     });
     const displays = orderedDisplays();
+    let sent = 0;
     for (const sourceId of selected) {
       const index = Number(sourceId.replace("mon-", "")) - 1;
       const display = displays[index];
       const source =
         sources.find((item) => display && item.display_id === String(display.id)) ?? sources[index];
       if (!source || source.thumbnail.isEmpty()) continue;
+      sent += 1;
       const offsetMs = Date.now() - startedAt;
       const reply = await request(
         {
@@ -73,6 +77,13 @@ export function createScreenCapture(
       );
       listeners.onReply(reply.result);
     }
+    if (sent > 0) {
+      reportedMiss = false;
+      return;
+    }
+    if (reportedMiss) return;
+    reportedMiss = true;
+    listeners.onError("Cattura non riuscita: nessuna immagine dallo schermo.");
   }
 
   function run(): void {
@@ -95,6 +106,7 @@ export function createScreenCapture(
       if (timer) clearInterval(timer);
       selected = sourceIds;
       startedAt = originMs;
+      reportedMiss = false;
       run();
       timer = setInterval(run, intervalMs);
     },

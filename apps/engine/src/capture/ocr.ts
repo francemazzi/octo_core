@@ -30,14 +30,23 @@ export interface OcrReader {
   read(imageBase64: string, frameId?: string): Promise<string>;
 }
 
-/** glm-ocr repeats its transcript inside code fences: keep the first copy only. */
-export function cleanOcrText(raw: string): string {
-  const firstCopy = raw.split("```")[0] ?? "";
-  return firstCopy
+function squeeze(text: string): string {
+  return text
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim()
     .slice(0, MAX_OCR_CHARS);
+}
+
+/**
+ * glm-ocr repeats its transcript inside code fences: keep the first copy only.
+ * When the only copy is the fenced one, keep that body (a leading language tag drops).
+ */
+export function cleanOcrText(raw: string): string {
+  const [before = "", inside = ""] = raw.split("```");
+  const leading = squeeze(before);
+  if (leading.length > 0) return leading;
+  return squeeze(inside.replace(/^[a-z0-9_+-]{1,16}\n/, ""));
 }
 
 /** Whether the OCR model is installed, and whether it runs here rather than on ollama.com. */
@@ -61,12 +70,25 @@ async function assertLocalModel(base: string, model: string, fetchImpl: FetchLik
   if (!state.local) throw new OctoError("remote_model", `${model} runs outside this computer`);
 }
 
+function timeoutError(signal: AbortSignal): OctoError {
+  const reason = signal.reason;
+  const error = asOllamaError(
+    reason instanceof Error ? reason : new DOMException("timed out", "TimeoutError"),
+  );
+  return error instanceof OctoError
+    ? error
+    : new OctoError("ollama_timeout", "Ollama did not answer in time");
+}
+
 /** Streams the transcript; a timeout or a dropped connection while reading gets an Ollama code. */
-async function readTranscript(body: ReadableStream<Uint8Array>): Promise<string> {
+async function readTranscript(
+  body: ReadableStream<Uint8Array>,
+  signal: AbortSignal,
+): Promise<string> {
   let text = "";
   let aborted: string | null = null;
   try {
-    for await (const line of ndjsonLines(body)) {
+    for await (const line of ndjsonLines(body, signal)) {
       const chunk = JSON.parse(line) as { message?: { content?: string }; error?: string };
       if (chunk.error) {
         aborted = chunk.error;
@@ -75,17 +97,25 @@ async function readTranscript(body: ReadableStream<Uint8Array>): Promise<string>
       text += chunk.message?.content ?? "";
     }
   } catch (error) {
+    // Cancelling a stream that never closes rejects the read. Text already in hand is kept;
+    // an empty read is the timeout, so a configured provider can try the screenshot once.
+    const partial = cleanOcrText(text);
+    if (partial.length > 0) return partial;
+    if (signal.aborted) throw timeoutError(signal);
     throw asOllamaError(error);
   }
   // Ollama aborts dense, repetitive screens (tables) with "token repeat limit reached" after
   // reading them: keep what was streamed and fail only when nothing was read.
   const cleaned = cleanOcrText(text);
+  if (cleaned.length === 0 && signal.aborted) throw timeoutError(signal);
   if (cleaned.length === 0 && aborted) throw new OctoError("ocr_failed", aborted);
   return cleaned;
 }
 
+const OCR_TIMEOUT_MS = 60_000;
+
 export function createOllamaOcr(
-  options: { base?: string; model?: string; fetchImpl?: FetchLike } = {},
+  options: { base?: string; model?: string; fetchImpl?: FetchLike; timeoutMs?: number } = {},
 ): OcrReader {
   const base = options.base ?? DEFAULT_OLLAMA_BASE;
   if (!isLoopbackUrl(base)) {
@@ -100,6 +130,7 @@ export function createOllamaOcr(
       try {
         checked ??= assertLocalModel(base, model, fetchImpl);
         await checked;
+        const signal = AbortSignal.timeout(options.timeoutMs ?? OCR_TIMEOUT_MS);
         const response = await ollamaFetch(
           `${base}/api/chat`,
           {
@@ -111,7 +142,7 @@ export function createOllamaOcr(
               options: { num_ctx: 8_192, num_predict: 1_024, temperature: 0, stop: ["```"] },
               messages: [{ role: "user", content: OCR_PROMPT, images: [imageBase64] }],
             }),
-            signal: AbortSignal.timeout(60_000),
+            signal,
           },
           fetchImpl,
         );
@@ -121,7 +152,7 @@ export function createOllamaOcr(
         if (!response.ok || !response.body) {
           throw new OctoError("ocr_failed", `ollama ${response.status}`);
         }
-        return await readTranscript(response.body);
+        return await readTranscript(response.body, signal);
       } catch (error) {
         // Ollama may have been closed or the model removed: check again before the next frame.
         checked = null;

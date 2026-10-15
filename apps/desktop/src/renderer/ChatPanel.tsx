@@ -176,6 +176,9 @@ export function ChatPanel({ sessionId, evidenceCount, remote, localModel, busy }
           >
             Chiedi
           </button>
+          {busy ? (
+            <span className="muted">Chiedi si abilita quando l'analisi è finita.</span>
+          ) : null}
           {sending ? <span className="muted">L'assistente sta leggendo la sessione…</span> : null}
         </div>
       </form>

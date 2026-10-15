@@ -176,6 +176,7 @@ export function createSessionControl(deps: ControlDeps) {
         const started = reply.result as { sessionId: string; startedWall: string };
         state.capture = "recording";
         state.ocrFallback = null;
+        state.note = "";
         state.activeSessionId = started.sessionId;
         state.startedWall = started.startedWall;
         state.focus = { sessionId: started.sessionId, at: Date.now() };

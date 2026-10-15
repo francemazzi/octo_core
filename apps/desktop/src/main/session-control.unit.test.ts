@@ -123,6 +123,14 @@ describe("recording control", () => {
     expect(control.state.ocrFallback).toBeNull();
   });
 
+  it("clears the previous note when a recording starts", async () => {
+    const { control } = setup();
+    control.state.note = "Nessuna schermata letta. Nessuna attività riconosciuta.";
+    await control.start(["mon-1"]);
+    expect(control.state.capture).toBe("recording");
+    expect(control.state.note).toBe("");
+  });
+
   it("after Stop analyses locally, or opens the remote consent, or says no model can", async () => {
     const local = setup();
     await local.control.start(["mon-1"]);

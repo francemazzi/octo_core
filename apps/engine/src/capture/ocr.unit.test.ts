@@ -25,6 +25,7 @@ describe("local OCR", () => {
     expect(
       cleanOcrText("Cliente:   Rossi\n\n\n\nArticolo 1234\n```markdown\nCliente: Rossi\n```"),
     ).toBe("Cliente: Rossi\n\nArticolo 1234");
+    expect(cleanOcrText("```markdown\nCliente: Rossi\n```")).toBe("Cliente: Rossi");
     expect(cleanOcrText("x".repeat(5_000))).toHaveLength(4_000);
   });
 
@@ -114,5 +115,23 @@ describe("local OCR", () => {
           : new Response("model not found", { status: 404 })) as typeof fetch,
     });
     await expect(removed.read("aW1n")).rejects.toMatchObject({ code: "ocr_model_missing" });
+  });
+
+  it("ends a stream that never closes with the timeout", async () => {
+    const hanging = createOllamaOcr({
+      base: BASE,
+      timeoutMs: 50,
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        if (String(input).endsWith("/api/tags")) return Response.json({ models: GLM });
+        return new Response(
+          new ReadableStream({
+            pull() {
+              return new Promise(() => undefined);
+            },
+          }),
+        );
+      }) as typeof fetch,
+    });
+    await expect(hanging.read("aW1n")).rejects.toMatchObject({ code: "ollama_timeout" });
   });
 });

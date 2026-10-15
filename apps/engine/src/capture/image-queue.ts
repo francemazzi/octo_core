@@ -1,4 +1,5 @@
 import type { RemoteProvider } from "@octo/contracts";
+import { OctoError } from "../errors.js";
 import type { IngestResult } from "./ingest.js";
 import type { OcrReader } from "./ocr.js";
 
@@ -23,7 +24,7 @@ export type ImageQueueDeps = {
   /** Binds the frame to the session as it is at receipt, so OCR finishing later still counts it. */
   accept: (sourceId: string) => ((text: TextFrame) => IngestResult) | { rejected: string };
   onFailure: (frameId: string, error: unknown) => void;
-  /** A screenshot was read, even an empty one. `via` is the provider when glm-ocr did not. */
+  /** A screenshot produced text. `via` is the provider when glm-ocr did not. */
   onRead?: (via: RemoteProvider | null) => void;
   /** A screenshot was skipped because `MAX_WAITING_IMAGES` were still waiting. */
   onSkipped?: (frameId: string, waiting: number) => void;
@@ -52,8 +53,11 @@ export function createImageQueue(deps: ImageQueueDeps) {
       chain = chain.then(async () => {
         try {
           const text = await ocr.read(frame.imageBase64, frame.frameId);
-          deps.onRead?.(ocr.lastVia ?? null);
-          if (text.length > 0) {
+          // An empty transcript read nothing: it is not evidence and does not clear failures.
+          if (text.length === 0) {
+            deps.onFailure(frame.frameId, new OctoError("ocr_failed", "empty transcript"));
+          } else {
+            deps.onRead?.(ocr.lastVia ?? null);
             ingest({
               frameId: frame.frameId,
               sourceId: frame.sourceId,
